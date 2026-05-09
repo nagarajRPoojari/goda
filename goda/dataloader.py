@@ -1,5 +1,5 @@
-
-
+import torch
+import time
 from abc import ABC
 from pathlib import Path
 from typing import Iterator, Generator, Tuple, List, Union
@@ -7,8 +7,7 @@ from goda.device import Device
 from goda.tokenizer import Tokenizer
 from goda.config import Config
 import pyarrow.parquet as pq
-import torch
-
+from goda.logger import logger
 
 class DistributedDataloader(ABC):
     def __init__(self, device: Device, data_dir: str,  batch_size: int, seq_len: int, tokenizer: Tokenizer) -> None:
@@ -27,9 +26,10 @@ class DistributedDataloader(ABC):
     def set_state(self, state: dict) -> None:
         pass
 
-
 class DistributedPretrainDataloader(DistributedDataloader):
-    def __init__(self, device: Device, config: Config, tokenizer: Tokenizer) -> None:
+    def __init__(self, device: Device, config: Config, tokenizer: Tokenizer,
+                 min_shards_required: int = 2, max_shards_to_wait: int = -1,
+                 shard_check_interval: float = 5.0) -> None:
         
         super().__init__(
             device=device,
@@ -46,8 +46,13 @@ class DistributedPretrainDataloader(DistributedDataloader):
         self.rank = proc_info["rank"]
         self.world_size = proc_info["world_size"]
         
-        self.train_shards = sorted((self.data_dir / "train").glob("*.parquet"))
-        self.val_shards = sorted((self.data_dir / "val").glob("*.parquet"))
+        # Dynamic shard discovery
+        self.min_shards_required = min_shards_required
+        self.max_shards_to_wait = max_shards_to_wait  # -1 means wait indefinitely
+        self.shard_check_interval = shard_check_interval
+        self.train_shards = []
+        self.val_shards = []
+        self._refresh_shard_lists()
         
         self.row_capacity = self.T + 1
         use_cuda: bool = device.is_cuda
@@ -65,17 +70,86 @@ class DistributedPretrainDataloader(DistributedDataloader):
         self.current_shard_idx = 0
         self.current_rg_idx = self.rank
         self.batches_consumed = 0
+        self.last_shard_refresh = time.time()
         
 
-    def _document_batches(self, split: str, start_shard_idx: int = 0, start_rg_idx: int = -1) -> Iterator[list]:
+    def _refresh_shard_lists(self) -> None:
+        self.train_shards = sorted((self.data_dir / "train").glob("*.parquet"))
+        self.val_shards = sorted((self.data_dir / "val").glob("*.parquet"))
+    
+    def _wait_for_shards(self, split: str, required_count: int) -> None:
+        """
+        Wait until minimum number of shards are available.
+        If max_shards_to_wait is set and reached, stop waiting even if minimum not met.
+        """
         shards = self.train_shards if split == "train" else self.val_shards
         
+        while len(shards) < required_count:
+            # Check if we've hit the upper limit
+            if self.max_shards_to_wait > 0 and len(shards) >= self.max_shards_to_wait:
+                if self.rank == 0:
+                    logger.info(f"✓ Reached max shard limit ({self.max_shards_to_wait}). Proceeding with {len(shards)} shards.")
+                return
+            
+            if self.rank == 0:
+                wait_msg = f"Waiting for shards... ({len(shards)}/{required_count} available"
+                if self.max_shards_to_wait > 0:
+                    wait_msg += f", max: {self.max_shards_to_wait}"
+                wait_msg += ")"
+                logger.info(wait_msg)
+            
+            time.sleep(self.shard_check_interval)
+            self._refresh_shard_lists()
+            shards = self.train_shards if split == "train" else self.val_shards
+        
+        if self.rank == 0:
+            logger.info(f"✓ Sufficient shards available: {len(shards)}")
+    
+    def _should_refresh_shards(self) -> bool:
+        current_time = time.time()
+        if current_time - self.last_shard_refresh > self.shard_check_interval:
+            self.last_shard_refresh = current_time
+            return True
+        return False
+
+    def _document_batches(self, split: str, start_shard_idx: int = 0, start_rg_idx: int = -1) -> Iterator[list]:
+        self._wait_for_shards(split, self.min_shards_required)
+        
+        shards = self.train_shards if split == "train" else self.val_shards
         shard_cycle_start = start_shard_idx % len(shards) if shards else 0
         
         while True:
+            # Periodically refresh shard list to discover new downloads
+            if self._should_refresh_shards():
+                old_count = len(shards)
+                self._refresh_shard_lists()
+                shards = self.train_shards if split == "train" else self.val_shards
+                if len(shards) > old_count and self.rank == 0:
+                    logger.info(f"Discovered {len(shards) - old_count} new shard(s). Total: {len(shards)}")
+            
+            # If no shards available, check if we should wait or stop
+            if not shards:
+                # If max_shards_to_wait is set and we've reached it, stop waiting
+                if self.max_shards_to_wait > 0:
+                    if self.rank == 0:
+                        logger.info(f"No shards available and max limit ({self.max_shards_to_wait}) reached. Stopping.")
+                    break
+                
+                if self.rank == 0:
+                    logger.info("No shards available, waiting...")
+                time.sleep(self.shard_check_interval)
+                self._refresh_shard_lists()
+                shards = self.train_shards if split == "train" else self.val_shards
+                continue
+            
             for shard_offset in range(len(shards)):
                 shard_idx = (shard_cycle_start + shard_offset) % len(shards)
                 shard_path = shards[shard_idx]
+                
+                # Check if shard still exists (in case of cleanup)
+                if not shard_path.exists():
+                    continue
+                
                 pf = pq.ParquetFile(shard_path)
                 
                 # Determine starting row group index

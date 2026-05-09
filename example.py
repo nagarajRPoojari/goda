@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import argparse
 from torch.optim import Optimizer
 from goda.dataloader import DistributedDataloader, DistributedPretrainDataloader
 from goda.device import Device
@@ -40,16 +41,28 @@ if config.compile_model:
     model = device.compile_model(model, enabled=True)  # type: ignore[assignment]
 
 optimizer = configure_optimizer(model, config)
-dataloader: DistributedDataloader = DistributedPretrainDataloader(
-    device=device,
-    config=config,
-    tokenizer=tokenizer
-)
 
 if __name__ == "__main__":
+    # Parse command line arguments for dataloader configuration
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--min-shards", type=int, default=2,
+                       help="Minimum shards required before starting training")
+    parser.add_argument("--max-shards-to-wait", type=int, default=-1,
+                       help="Maximum shards to wait for (-1 = wait indefinitely)")
+    args = parser.parse_args()
+    
+    dataloader: DistributedDataloader = DistributedPretrainDataloader(
+        device=device,
+        config=config,
+        tokenizer=tokenizer,
+        min_shards_required=args.min_shards,
+        max_shards_to_wait=args.max_shards_to_wait
+    )
+    
     logger.info(f"\n{'='*50}")
     logger.info(f"Device: {device}")
     logger.info(f"Training on {device.type} with AMP={device.use_amp}")
+    logger.info(f"Dataloader min_shards: {args.min_shards}")
     logger.info(f"{'='*50}\n")
     
     trainer = Trainer(

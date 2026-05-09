@@ -16,7 +16,8 @@ class Device:
         self.is_cpu = self.type == "cpu"
 
         self.use_amp = self.is_cuda and config.mixed_precision
-        self.scaler = GradScaler(enabled=self.use_amp)
+        self.amp_dtype = self._get_amp_dtype()
+        self.scaler = GradScaler(enabled=self.use_amp and self.amp_dtype == torch.float16)
 
         self._setup(config)
 
@@ -27,11 +28,19 @@ class Device:
             return torch.device("mps")
         return torch.device("cpu")
 
+    def _get_amp_dtype(self):
+        if not self.use_amp:
+            return None
+        if self.is_cuda and torch.cuda.is_bf16_supported():
+            return torch.bfloat16
+        return torch.float16
+
     def _setup(self, config: Config):
         if self.is_mps:
             logger.info("MPS device active (fp32)")
         elif self.is_cuda:
-            logger.info(f"CUDA device active | AMP={self.use_amp}")
+            amp_dtype = str(self.amp_dtype).replace("torch.", "") if self.amp_dtype is not None else "disabled"
+            logger.info(f"CUDA device active | AMP={self.use_amp} | dtype={amp_dtype}")
         else:
             logger.info("CPU device active")
 
@@ -63,7 +72,11 @@ class Device:
         return model
 
     def autocast(self):
-        return autocast(device_type="cuda" if self.is_cuda else "cpu", enabled=self.use_amp)
+        return autocast(
+            device_type="cuda" if self.is_cuda else "cpu",
+            dtype=self.amp_dtype,
+            enabled=self.use_amp,
+        )
 
     def to_device(self, *tensors, non_blocking=True):
         if self.is_cuda:
