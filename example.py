@@ -43,7 +43,6 @@ if config.compile_model:
 optimizer = configure_optimizer(model, config)
 
 if __name__ == "__main__":
-    # Parse command line arguments for dataloader configuration
     parser = argparse.ArgumentParser()
     parser.add_argument("--min-shards", type=int, default=2,
                        help="Minimum shards required before starting training")

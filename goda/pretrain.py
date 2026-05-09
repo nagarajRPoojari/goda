@@ -10,6 +10,7 @@ from goda.config import Config
 from goda.dataloader import DistributedDataloader
 from goda.device import Device
 from goda.logger import logger
+from goda.scheduler import Scheduler
 from torch.optim import Optimizer
 
 
@@ -29,6 +30,18 @@ class Trainer:
             save_every_n_steps=config.save_checkpoint_every_n_steps,
             keep_last_n=config.keep_last_n_checkpoints,
             is_main_process=self.is_main_process,
+        )
+        
+        self.scheduler = Scheduler(
+            num_iterations=config.train_num_steps,
+            warmup_steps=config.warmup_steps,
+            warmdown_ratio=config.warmdown_ratio,
+            final_lr_frac=config.final_lr_frac,
+            muon_momentum_warmup_steps=config.muon_momentum_warmup_steps,
+            muon_momentum_start=config.muon_momentum_start,
+            muon_momentum_peak=config.muon_momentum_peak,
+            muon_momentum_final=config.muon_momentum_final,
+            weight_decay=config.weight_decay,
         )
         
         # Resume from checkpoint if specified
@@ -168,6 +181,7 @@ class Trainer:
             micro_step += 1
 
             if not is_accumulating:
+                scheduler_metrics = self.scheduler.step(self.optimizer, step)
                 self.device.optimizer_step(
                     self.optimizer,
                     grad_clip=self.config.grad_clip,
@@ -186,6 +200,9 @@ class Trainer:
                     "train/tokens_per_step": tokens_per_step,
                     "train/tokens_per_second": tokens_per_second,
                     "train/elapsed_time_sec": elapsed_time,
+                    "scheduler/lr_multiplier": scheduler_metrics["lr_multiplier"],
+                    "scheduler/muon_momentum": scheduler_metrics["muon_momentum"],
+                    "scheduler/muon_weight_decay": scheduler_metrics["muon_weight_decay"],
                 }
 
                 if step % self.config.log_every_n_steps == 0:

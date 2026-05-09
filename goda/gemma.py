@@ -231,55 +231,96 @@ class Gemma(nn.Module):
 
 
 def configure_optimizer(model: nn.Module, config: Config) -> MuonAdamW:
-    muon_params = []
-    adamw_params = []
+    model_dim = config.embed_dim
+    
+    matrix_params = []  # 2D parameters only (for Muon)
+    embedding_params = []
+    lm_head_params = []
+    scalar_params = []  # 1D parameters (norms, biases, etc.)
     
     for name, param in model.named_parameters():
         if not param.requires_grad:
             continue
-            
-        if param.ndim == 2:
-            muon_params.append(param)
-            logger.info(f"Muon: {name} - shape {param.shape}")
+        
+        if 'tok_embeddings' in name:
+            embedding_params.append(param)
+            logger.info(f"Embedding: {name} - shape {param.shape}")
+        elif 'output' in name:
+            lm_head_params.append(param)
+            logger.info(f"LM Head: {name} - shape {param.shape}")
+        elif param.ndim == 2:
+            matrix_params.append(param)
+            logger.info(f"Matrix: {name} - shape {param.shape}")
         else:
-            adamw_params.append(param)
-            logger.info(f"AdamW: {name} - shape {param.shape}")
+            scalar_params.append(param)
+            logger.info(f"Scalar: {name} - shape {param.shape}")
     
-    logger.info(f"\nTotal Muon parameters: {len(muon_params)}")
-    logger.info(f"Total AdamW parameters: {len(adamw_params)}")
+    logger.info(f"\nTotal embedding parameters: {len(embedding_params)}")
+    logger.info(f"Total lm_head parameters: {len(lm_head_params)}")
+    logger.info(f"Total matrix parameters: {len(matrix_params)}")
+    logger.info(f"Total scalar parameters: {len(scalar_params)}")
+    
+    # Scale the LR for the AdamW parameters by 1/sqrt(dmodel) (tuned for 768 dim model)
+    dmodel_lr_scale = (model_dim / 768) ** -0.5
+    logger.info(f"Scaling the LR for the AdamW parameters ∝1/√({model_dim}/768) = {dmodel_lr_scale:.6f}")
     
     param_groups = []
     
-    # Group Muon parameters by shape (required for stacking in optimizer)
+    if lm_head_params:
+        param_groups.append({
+            'kind': 'adamw',
+            'params': lm_head_params,
+            'lr': config.unembedding_lr * dmodel_lr_scale,
+            'betas': (config.adamw_beta1, config.adamw_beta2_lm_head),
+            'eps': config.adamw_eps,
+            'weight_decay': config.weight_decay_lm_head,
+        })
+    
+    if embedding_params:
+        param_groups.append({
+            'kind': 'adamw',
+            'params': embedding_params,
+            'lr': config.embedding_lr * dmodel_lr_scale,
+            'betas': (config.adamw_beta1, config.adamw_beta2_embedding),
+            'eps': config.adamw_eps,
+            'weight_decay': config.weight_decay_embedding,
+        })
+    
+    if scalar_params:
+        param_groups.append({
+            'kind': 'adamw',
+            'params': scalar_params,
+            'lr': config.scalar_lr * config.scalar_lr_multiplier,
+            'betas': (config.adamw_beta1, config.adamw_beta2_scalar),
+            'eps': config.adamw_eps,
+            'weight_decay': config.weight_decay_scalar,
+        })
+    
+    # Muon groups (matrix params only, grouped by shape for stacking)
     shape_groups = {}
-    for param in muon_params:
+    for param in matrix_params:
         shape = param.shape
         if shape not in shape_groups:
             shape_groups[shape] = []
         shape_groups[shape].append(param)
-
-    # Create a Muon param group for each unique shape
+    
     for shape in sorted(shape_groups.keys()):
         group_params = shape_groups[shape]
         logger.info(f"Muon group: shape {shape} with {len(group_params)} parameters")
         param_groups.append({
             'kind': 'muon',
             'params': group_params,
-            'lr': config.muon_lr,
+            'lr': config.matrix_lr,
             'momentum': config.muon_momentum,
+            'ns_steps': config.muon_ns_steps,
             'beta2': config.muon_beta2,
             'weight_decay': config.weight_decay,
-            'ns_steps': config.muon_ns_steps,
         })
     
-    # Add AdamW group for all non-2D parameters
-    param_groups.append({
-        'kind': 'adamw',
-        'params': adamw_params,
-        'lr': config.adamw_lr,
-        'betas': (config.adamw_beta1, config.adamw_beta2),
-        'eps': config.adamw_eps,
-        'weight_decay': config.weight_decay,
-    })
+    optimizer = MuonAdamW(param_groups)
     
-    return MuonAdamW(param_groups)
+    # Set initial_lr for each group (useful for learning rate schedulers)
+    for group in optimizer.param_groups:
+        group["initial_lr"] = group["lr"]
+    
+    return optimizer

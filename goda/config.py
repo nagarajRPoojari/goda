@@ -40,7 +40,7 @@ class Config:
     
     # checkpointing
     checkpoint_dir: str = "checkpoints"
-    save_checkpoint_every_n_steps: int | None = 20
+    save_checkpoint_every_n_steps: int | None = 200
     keep_last_n_checkpoints: int = 1
     resume_from_checkpoint: str | None = "checkpoints/checkpoint_step_33.pt"
     load_best_checkpoint: bool = True 
@@ -52,15 +52,41 @@ class Config:
     wandb_entity: str | None = None
 
     # Optimizer hyperparameters
-    muon_lr: float = 3e-4
-    adamw_lr: float = 3e-4
+    # Learning rates
+    unembedding_lr: float = 0.004
+    embedding_lr: float = 0.2
+    matrix_lr: float = 0.02
+    scalar_lr: float = 0.5
+    
+    # Muon hyperparameters (for matrix params)
     muon_momentum: float = 0.95
-    muon_beta2: float = 0.95
+    muon_beta2: float = 0.9
     muon_ns_steps: int = 5
-    adamw_beta1: float = 0.9
-    adamw_beta2: float = 0.999
-    adamw_eps: float = 1e-8
-    weight_decay: float = 0.1
+    
+    # AdamW hyperparameters (for embeddings, lm_head, scalars)
+    adamw_beta1: float = 0.8
+    adamw_beta2_lm_head: float = 0.96
+    adamw_beta2_embedding: float = 0.995
+    adamw_beta2_scalar: float = 0.95
+    adamw_eps: float = 1e-10
+    
+    # Weight decay
+    weight_decay: float = 0.0 # initial place holder, only used in step 0
+    weight_decay_lm_head: float = 0.01
+    weight_decay_embedding: float = 0.001
+    weight_decay_scalar: float = 0.05
+    
+    # Scalar LR multiplier
+    scalar_lr_multiplier: float = 0.01
+    
+    # Scheduler hyperparameters
+    warmup_steps: int = 0
+    warmdown_ratio: float = 0.0
+    final_lr_frac: float = 0.1
+    muon_momentum_warmup_steps: int = 400
+    muon_momentum_start: float = 0.85
+    muon_momentum_peak: float = 0.97
+    muon_momentum_final: float = 0.90
 
 
 DEFAULT_CONFIG  = Config(
