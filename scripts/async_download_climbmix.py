@@ -288,23 +288,14 @@ def main():
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
     
-    parser.add_argument("--output-dir", type=str, default="data/climbmix",
-                       help="Directory to save downloaded files")
-    parser.add_argument("--num-train-shards", type=int, default=10,
-                       help="Number of shards to download for training")
-    parser.add_argument("--min-shards-before-training", type=int, default=3,
-                       help="Minimum shards before training can start")
-    parser.add_argument("--repo-id", type=str, default="karpathy/climbmix-400b-shuffle",
-                       help="Hugging Face repository ID")
-    parser.add_argument("--base-url", type=str,
-                       default="https://huggingface.co/datasets/karpathy/climbmix-400b-shuffle/resolve/main",
-                       help="Base URL for the dataset")
-    parser.add_argument("--shard-pattern", type=str, default="shard_{:05d}.parquet",
-                       help="Pattern for shard filenames")
-    parser.add_argument("--max-concurrent", type=int, default=3,
-                       help="Maximum concurrent downloads")
-    parser.add_argument("--wait-for-training", action="store_true",
-                       help="Wait until minimum shards are ready before exiting")
+    parser.add_argument("--output-dir", type=str, default="data/climbmix", help="Directory to save downloaded files")
+    parser.add_argument("--num-train-shards", type=int, default=10, help="Number of shards to download for training")
+    parser.add_argument("--min-shards-before-training", type=int, default=3, help="Minimum shards before training can start")
+    parser.add_argument("--repo-id", type=str, default="karpathy/climbmix-400b-shuffle", help="Hugging Face repository ID")
+    parser.add_argument("--base-url", type=str, default="https://huggingface.co/datasets/karpathy/climbmix-400b-shuffle/resolve/main", help="Base URL for the dataset")
+    parser.add_argument("--shard-pattern", type=str, default="shard_{:05d}.parquet", help="Pattern for shard filenames")
+    parser.add_argument("--max-concurrent", type=int, default=3, help="Maximum concurrent downloads")
+    parser.add_argument("--wait-for-training", action="store_true", help="Wait until minimum shards are ready before exiting")
     
     args = parser.parse_args()
     
