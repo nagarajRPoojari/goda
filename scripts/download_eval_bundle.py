@@ -1,0 +1,25 @@
+import urllib.request
+import ssl
+import zipfile
+import os
+import shutil
+
+ssl_context = ssl.create_default_context()
+ssl_context.check_hostname = False
+ssl_context.verify_mode = ssl.CERT_NONE
+
+url = "https://karpathy-public.s3.us-west-2.amazonaws.com/eval_bundle.zip"
+filename = "eval_bundle.zip"
+
+os.makedirs("data", exist_ok=True)
+os.makedirs("dump", exist_ok=True)
+
+opener = urllib.request.build_opener(urllib.request.HTTPSHandler(context=ssl_context))
+urllib.request.install_opener(opener)
+urllib.request.urlretrieve(url, filename)
+
+if os.path.exists(filename):
+    with zipfile.ZipFile(filename, 'r') as zip_ref:
+        zip_ref.extractall('data')
+    shutil.move(filename, 'dump/eval_bundle.zip')
+

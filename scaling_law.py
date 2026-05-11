@@ -104,6 +104,7 @@ def generate_config_yaml(params, output_file):
         'log_every_n_steps': 1,
         'eval_every_n_steps': 100,
         'eval_num_steps': 10,
+        'core_eval_every_n_step': 500,
         'gradient_accumulation_steps': 1,
         'checkpoint_dir': 'checkpoints',
         'save_checkpoint_every_n_steps': 200,

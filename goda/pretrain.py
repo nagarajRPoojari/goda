@@ -11,11 +11,12 @@ from goda.dataloader import DistributedDataloader
 from goda.device import Device
 from goda.logger import logger
 from goda.scheduler import Scheduler
+from goda.eval import CoreEvaluator, BPBEvaluator, Evaluator
 from torch.optim import Optimizer
 
 
 class Trainer:
-    def __init__(self, model: nn.Module, optimizer: Optimizer, dataloader: DistributedDataloader, device: Device, config: Config) -> None:
+    def __init__(self, model: nn.Module, optimizer: Optimizer, dataloader: DistributedDataloader, device: Device, config: Config, tokenizer: Any = None) -> None:
         self.model = model
         self.optimizer = optimizer
         self.dataloader = dataloader
@@ -44,7 +45,20 @@ class Trainer:
             weight_decay=config.weight_decay,
         )
         
-        # Resume from checkpoint if specified
+        self.core_evaluator = CoreEvaluator(
+            model=model,
+            config=config,
+            tokenizer=tokenizer,
+            device=device,
+        )
+        
+        self.bpb_evaluator = BPBEvaluator(
+            model=model,
+            config=config,
+            device=device,
+            dataloader=dataloader,
+        )
+        
         self.start_step = 0
         if config.resume_from_checkpoint is not None:
             self._resume_from_checkpoint()
@@ -132,6 +146,45 @@ class Trainer:
     def _log_wandb(self, metrics: dict, step: int):
         if self.wandb_run is not None:
             self.wandb_run.log(metrics, step=step)
+    
+    def _run_evaluation( self, evaluator: Evaluator, step: int, metric_prefix: str, save_checkpoint: bool = False, **eval_kwargs) -> dict[str, Any]:
+        self.model.eval()
+        with torch.no_grad():
+            results = evaluator.evaluate(**eval_kwargs)
+        self.model.train()
+        
+        metrics = {}
+
+        def flatten(prefix: str, value: Any):
+            if isinstance(value, dict):
+                for sub_key, sub_value in value.items():
+                    flatten(f"{prefix}/{sub_key}", sub_value)
+            else:
+                metrics[prefix] = value
+
+        for key, value in results.items():
+            flatten(f"{metric_prefix}/{key}", value)
+
+        if self.is_main_process:
+            log_items = " | ".join(f"{key}={value:.4f}" for key, value in metrics.items())
+            logger.info(f"Eval complete | step={step} | {log_items}")
+        
+        self._log_wandb(metrics, step=step)
+            
+        if self.is_main_process and results and save_checkpoint:
+            val_loss = results.get("loss")
+            if val_loss is not None:
+                is_best = self.checkpointer.should_checkpoint_on_eval(val_loss)
+                self.checkpointer.save_checkpoint(
+                    step=step,
+                    model=self.model,
+                    optimizer=self.optimizer,
+                    dataloader_state=self._collect_dataloader_state(),
+                    val_loss=val_loss,
+                    is_best=is_best,
+                )
+        
+        return results
 
     def train(self):
         self.model.train()
@@ -205,7 +258,34 @@ class Trainer:
                     "scheduler/muon_weight_decay": scheduler_metrics["muon_weight_decay"],
                 }
 
-                if step % self.config.log_every_n_steps == 0:
+                if (step + 1)  % self.config.eval_every_n_steps == 0 and step > 0:
+                    self._run_evaluation(
+                        evaluator=self.bpb_evaluator,
+                        step=step,
+                        metric_prefix="val",
+                        save_checkpoint=True,
+                        num_steps=self.config.eval_num_steps,
+                    )
+                
+                if (step + 1)  % self.config.core_eval_every_n_step == 0 and step > 0:
+                    self._run_evaluation(
+                        evaluator=self.core_evaluator,
+                        step=step,
+                        metric_prefix="core",
+                        task_labels=["hellaswag_zeroshot"],
+                        limit=1,
+                    )
+                
+                if self.is_main_process and self.config.save_checkpoint_every_n_steps is not None:
+                    if (step + 1)  % self.config.save_checkpoint_every_n_steps == 0 and step > 0:
+                        self.checkpointer.save_checkpoint(
+                            step=step,
+                            model=self.model,
+                            optimizer=self.optimizer,
+                            dataloader_state=self._collect_dataloader_state(),
+                        )
+
+                if (step + 1) % self.config.log_every_n_steps == 0:
                     logger.info(
                         f"Step {step:4d} | "
                         f"Loss: {metrics['train/loss']:.4f} | "
@@ -215,30 +295,6 @@ class Trainer:
                     )
                     self._log_wandb({**metrics, "train/memory": self.device.memory()}, step=step)
 
-                if step % self.config.eval_every_n_steps == 0 and step > 0:
-                    val_loss = self.evaluate(num_steps=self.config.eval_num_steps, step=step)
-                    self.model.train()
-                    metrics["val/loss"] = val_loss
-                    
-                    if self.is_main_process:
-                        is_best = self.checkpointer.should_checkpoint_on_eval(val_loss)
-                        self.checkpointer.save_checkpoint(
-                            step=step,
-                            model=self.model,
-                            optimizer=self.optimizer,
-                            dataloader_state=self._collect_dataloader_state(),
-                            val_loss=val_loss,
-                            is_best=is_best,
-                        )
-                
-                if self.is_main_process and self.config.save_checkpoint_every_n_steps is not None:
-                    if step % self.config.save_checkpoint_every_n_steps == 0 and step > 0:
-                        self.checkpointer.save_checkpoint(
-                            step=step,
-                            model=self.model,
-                            optimizer=self.optimizer,
-                            dataloader_state=self._collect_dataloader_state(),
-                        )
                 accumulated_loss = 0.0
 
         if self.is_main_process:
@@ -253,49 +309,3 @@ class Trainer:
         
         if self.wandb_run is not None:
             self.wandb_run.finish()
-
-    def evaluate(self, num_steps=10, step: int | None = None):
-        self.model.eval()
-        total_loss = 0.0
-        eval_start_time = time.perf_counter()
-        total_tokens = 0
-
-        with torch.no_grad():
-            for eval_step, (inputs, targets) in enumerate(self.dataloader.batch_loader(split="val")):
-                if eval_step >= num_steps:
-                    break
-
-                with self.device.autocast():
-                    logits = self.model(inputs)
-                    loss = nn.functional.cross_entropy(
-                        logits.view(-1, logits.size(-1)),
-                        targets.view(-1)
-                    )
-
-                total_loss += loss.item()
-                total_tokens += targets.numel()
-
-        self.device.synchronize()
-        eval_time = time.perf_counter() - eval_start_time
-        avg_loss = total_loss / num_steps
-        tokens_per_second = (total_tokens * self.process_info["world_size"]) / eval_time if eval_time > 0 else 0.0
-
-        logger.info(f"\n{'='*50}")
-        logger.info(
-            f"Validation Loss: {avg_loss:.4f} | "
-            f"Eval Time: {eval_time:.4f}s | "
-            f"Tokens/s: {tokens_per_second:.2f}"
-        )
-        logger.info(f"{'='*50}\n")
-
-        if step is not None:
-            self._log_wandb(
-                {
-                    "val/loss": avg_loss,
-                    "val/eval_time_sec": eval_time,
-                    "val/tokens_per_second": tokens_per_second,
-                },
-                step=step,
-            )
-
-        return avg_loss

@@ -14,10 +14,8 @@ def training_process( train_script: str, train_args: list, coordinator: Download
     logger.info(f"Waiting for minimum {min_shards} shards...")
     wait_for_training_ready(coordinator, check_interval=2.0)
     
-    logger.info("\n" + "="*60)
     logger.info("STARTING TRAINING")
     logger.info("Download continues in background")
-    logger.info("="*60 + "\n")
     
     # Build command
     if use_torchrun:
@@ -28,9 +26,7 @@ def training_process( train_script: str, train_args: list, coordinator: Download
     logger.info(f"Running: {' '.join(cmd)}")
     subprocess.run(cmd, check=True)
     
-    logger.info("\n" + "="*60)
     logger.info("TRAINING COMPLETED")
-    logger.info("="*60)
 
 
 def main():
@@ -102,7 +98,7 @@ def main():
         for proc in processes:
             proc.join()
     except KeyboardInterrupt:
-        logger.info("\nStopping all processes...")
+        logger.info("Stopping all processes...")
         for proc in processes:
             if proc.is_alive():
                 proc.terminate()

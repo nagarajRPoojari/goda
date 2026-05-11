@@ -39,6 +39,7 @@ class Config:
     log_every_n_steps: int = 10
     eval_every_n_steps: int = 100
     eval_num_steps: int = 10
+    core_eval_every_n_step: int = 500
     gradient_accumulation_steps: int = 1
     
     # checkpointing

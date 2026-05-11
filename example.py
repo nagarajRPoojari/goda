@@ -48,18 +48,17 @@ def main():
         max_shards_to_wait=args.max_shards_to_wait
     )
     
-    logger.info(f"\n{'='*50}")
     logger.info(f"Device: {device}")
     logger.info(f"Training on {device.type} with AMP={device.use_amp}")
     logger.info(f"Dataloader min_shards: {args.min_shards}")
-    logger.info(f"{'='*50}\n")
     
     trainer = Trainer(
         model=model,
         optimizer=optimizer,
         dataloader=dataloader,
         device=device,
-        config=config
+        config=config,
+        tokenizer=tokenizer
     )
     trainer.train()
 

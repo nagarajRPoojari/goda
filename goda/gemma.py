@@ -255,7 +255,7 @@ def configure_optimizer(model: nn.Module, config: Config) -> MuonAdamW:
             scalar_params.append(param)
             logger.info(f"Scalar: {name} - shape {param.shape}")
     
-    logger.info(f"\nTotal embedding parameters: {len(embedding_params)}")
+    logger.info(f"Total embedding parameters: {len(embedding_params)}")
     logger.info(f"Total lm_head parameters: {len(lm_head_params)}")
     logger.info(f"Total matrix parameters: {len(matrix_params)}")
     logger.info(f"Total scalar parameters: {len(scalar_params)}")

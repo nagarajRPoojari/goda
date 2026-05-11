@@ -161,9 +161,7 @@ async def download_shard(
         count = coordinator.increment_downloaded()
         
         if count == coordinator.min_shards:
-            logger.info(f"\n{'='*60}")
             logger.info(f"✓ Minimum {coordinator.min_shards} shards downloaded - READY FOR TRAINING")
-            logger.info(f"{'='*60}\n")
 
 
 async def download_all_shards(
@@ -192,7 +190,6 @@ async def download_all_shards(
     logger.info(f"Max concurrent downloads: {max_concurrent}")
     logger.info(f"Minimum shards before training: {coordinator.min_shards}")
     logger.info(f"Using: {'huggingface_hub' if USE_HF_HUB else 'aiohttp'}")
-    logger.info("-" * 60)
     
     # Create SSL context for aiohttp
     ssl_context = ssl.create_default_context()
@@ -218,11 +215,9 @@ async def download_all_shards(
     
     coordinator.mark_complete()
     
-    logger.info("\n" + "=" * 60)
     logger.info("Download complete!")
     logger.info(f"Training data: {train_dir}")
     logger.info(f"Validation data: {val_dir}")
-    logger.info("=" * 60)
 
 
 def download_process(
@@ -274,10 +269,8 @@ def start_download_and_training(
     
     if start_training:
         wait_for_training_ready(coordinator)
-        logger.info("\n" + "="*60)
         logger.info("You can now start training!")
         logger.info("Download will continue in the background.")
-        logger.info("="*60 + "\n")
     
     return coordinator, download_proc
 
