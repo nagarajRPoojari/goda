@@ -22,6 +22,7 @@ class Config:
     tie_weights: bool = True
 
     mixed_precision: bool = True
+    gradient_checkpointing: bool = False
     
     # Model initialization and compilation
     use_meta_device: bool = True

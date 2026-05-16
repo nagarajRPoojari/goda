@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 from typing import Optional
+from torch.utils.checkpoint import checkpoint
 
 from goda.config import Config
 from goda.attention import FlashAttention
@@ -138,6 +139,7 @@ class Gemma(nn.Module):
     def __init__(self, config: Config):
         super().__init__()
         self.config = config
+        self.gradient_checkpointing = config.gradient_checkpointing
         
         self.tok_embeddings = nn.Embedding(
             config.vocab_size,
@@ -169,7 +171,11 @@ class Gemma(nn.Module):
         
         for i, block in enumerate(self.blocks):
             kv_cache = kv_caches[i] if kv_caches is not None else None
-            h = block(h, kv_cache=kv_cache, start_pos=start_pos)
+            if self.gradient_checkpointing and self.training and kv_cache is None:
+                # Use gradient checkpointing during training (not during generation with kv_cache)
+                h = checkpoint(block, h, kv_cache, start_pos, use_reentrant=False)
+            else:
+                h = block(h, kv_cache=kv_cache, start_pos=start_pos)
         
         h = self.norm(h)
         logits = self.output(h)

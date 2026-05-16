@@ -242,6 +242,10 @@ class PreTrainer:
                     params=self.model.parameters()
                 )
                 self.device.synchronize()
+                
+                # Clear cache periodically to reduce fragmentation
+                if step % 10 == 0:
+                    self.device.empty_cache()
 
                 step_time = time.perf_counter() - step_start_time
                 tokens_per_step = targets.numel() * self.process_info["world_size"] * self.config.gradient_accumulation_steps
