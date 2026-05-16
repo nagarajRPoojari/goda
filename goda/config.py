@@ -46,7 +46,7 @@ class Config:
     checkpoint_dir: str = "checkpoints"
     save_checkpoint_every_n_steps: int | None = 200
     keep_last_n_checkpoints: int = 1
-    resume_from_checkpoint: str | None = "checkpoints/checkpoint_step_33.pt"
+    resume_from_checkpoint: str | None = ""
     load_best_checkpoint: bool = True 
 
     # wandb

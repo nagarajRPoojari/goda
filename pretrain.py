@@ -8,7 +8,7 @@ from goda.config import DEFAULT_CONFIG, Config
 from goda.tokenizer import Tokenizer
 from goda.gemma import Gemma, configure_optimizer
 from goda.logger import logger
-from goda.pretrain import Trainer
+from goda.pretrain import PreTrainer
 
 
 def main():
@@ -52,7 +52,7 @@ def main():
     logger.info(f"Training on {device.type} with AMP={device.use_amp}")
     logger.info(f"Dataloader min_shards: {args.min_shards}")
     
-    trainer = Trainer(
+    trainer = PreTrainer(
         model=model,
         optimizer=optimizer,
         dataloader=dataloader,
