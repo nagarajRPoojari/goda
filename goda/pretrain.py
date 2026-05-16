@@ -190,16 +190,16 @@ class PreTrainer:
         self.model.train()
         train_start_time = time.perf_counter()
         accumulated_loss = 0.0
-        # When resuming, micro_step should align with the resumed step to maintain gradient accumulation sync
-        micro_step = self.start_step * self.config.gradient_accumulation_steps
-        step = self.start_step
+        micro_step = 0
         
         resume_state = getattr(self, 'dataloader_state', None)
 
-        for step, (inputs, targets) in enumerate(
-            self.dataloader.batch_loader(split="train", resume_state=resume_state), start=self.start_step
-        ):
-
+        # Don't use enumerate with start parameter - it causes step/micro_step mismatch
+        # Instead, manually track the step counter
+        step = self.start_step
+        batch_iterator = self.dataloader.batch_loader(split="train", resume_state=resume_state)
+        
+        for inputs, targets in batch_iterator:
             if self.checkpointer.interrupt_requested:
                 if self.is_main_process:
                     logger.warning("Saving checkpoint due to keyboard interrupt...")
@@ -259,7 +259,10 @@ class PreTrainer:
                     "scheduler/muon_weight_decay": scheduler_metrics["muon_weight_decay"],
                 }
 
-                if (step + 1)  % self.config.eval_every_n_steps == 0 and step > 0:
+                # Increment step counter after completing gradient accumulation
+                step += 1
+
+                if step % self.config.eval_every_n_steps == 0 and step > 0:
                     self._run_evaluation(
                         evaluator=self.bpb_evaluator,
                         step=step,
@@ -268,7 +271,7 @@ class PreTrainer:
                         num_steps=self.config.eval_num_steps,
                     )
                 
-                if (step + 1)  % self.config.core_eval_every_n_step == 0 and step > 0:
+                if step % self.config.core_eval_every_n_step == 0 and step > 0:
                     self._run_evaluation(
                         evaluator=self.core_evaluator,
                         step=step,
@@ -278,7 +281,7 @@ class PreTrainer:
                     )
                 
                 if self.is_main_process and self.config.save_checkpoint_every_n_steps is not None:
-                    if (step + 1)  % self.config.save_checkpoint_every_n_steps == 0 and step > 0:
+                    if step % self.config.save_checkpoint_every_n_steps == 0 and step > 0:
                         self.checkpointer.save_checkpoint(
                             step=step,
                             model=self.model,
@@ -286,7 +289,7 @@ class PreTrainer:
                             dataloader_state=self._collect_dataloader_state(),
                         )
 
-                if (step + 1) % self.config.log_every_n_steps == 0:
+                if step % self.config.log_every_n_steps == 0:
                     logger.info(
                         f"Step {step:4d} | "
                         f"Loss: {metrics['train/loss']:.4f} | "
