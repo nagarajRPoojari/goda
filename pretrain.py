@@ -21,6 +21,12 @@ def main():
     tokenizer = Tokenizer()
     config = Config.from_yaml(yaml_path=args.config)
     
+    # Validate vocab size matches tokenizer
+    if config.vocab_size != tokenizer.vocab_size:
+        logger.error(f"Config vocab_size ({config.vocab_size}) does not match tokenizer vocab_size ({tokenizer.vocab_size})")
+        logger.error(f"Please update the config file to set vocab_size: {tokenizer.vocab_size}")
+        raise ValueError(f"Vocab size mismatch: config={config.vocab_size}, tokenizer={tokenizer.vocab_size}")
+    
     device = Device(config)
     
     model: nn.Module

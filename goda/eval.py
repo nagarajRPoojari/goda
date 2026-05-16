@@ -417,7 +417,8 @@ class ChatCoreEvaluator(Evaluator):
         messages = conversation["messages"]
         messages.pop()
         
-        ids, _ = self.tokenizer.render_conversation(conversation, self.config.seq_length)
+        # Reserve 1 token for assistant_start to stay within seq_length
+        ids, _ = self.tokenizer.render_conversation(conversation, self.config.seq_length - 1)
         
         assistant_start = self.tokenizer.encode_special("<|assistant_start|>")
         ids.append(assistant_start)
