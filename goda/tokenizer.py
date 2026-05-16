@@ -31,7 +31,7 @@ class Tokenizer:
         ), dtype=torch.long)
 
     def encode_to_list(self,  batch: List[str],  add_bos: bool = True, add_eos: bool = False, padding: bool = True, max_length:Optional[int] = None ) -> list[Any]:
-        encoded = self.encoding.encode_batch(text=batch)
+        encoded = self.encoding.encode_batch(text=batch, disallowed_special=())
         
         processed = []
         for enc in encoded:
