@@ -181,14 +181,31 @@ class DistributedPretrainDataloader(DistributedDataloader):
         if resume_state and split == "train":
             start_shard_idx = resume_state.get('shard_idx', 0)
             start_rg_idx = resume_state.get('rg_idx', self.rank)
-            self.batches_consumed = resume_state.get('batches_consumed', 0)
+            batches_to_skip = resume_state.get('batches_consumed', 0)
+            self.batches_consumed = batches_to_skip
         else:
             start_shard_idx = 0
             start_rg_idx = self.rank
+            batches_to_skip = 0
             self.batches_consumed = 0
         
         batches = self._document_batches(split, start_shard_idx, start_rg_idx)
         doc_buffer = []
+        
+        # Skip already-consumed batches when resuming from checkpoint
+        if batches_to_skip > 0:
+            if self.rank == 0:
+                logger.info(f"Skipping {batches_to_skip} already-consumed document batches...")
+            for _ in range(batches_to_skip):
+                try:
+                    self._refill_buffer(doc_buffer, batches)
+                    doc_buffer.clear()  # Discard these batches
+                except StopIteration:
+                    if self.rank == 0:
+                        logger.warning(f"Reached end of data while skipping batches. Skipped {_} of {batches_to_skip}")
+                    break
+            if self.rank == 0:
+                logger.info(f"✓ Skipped {batches_to_skip} batches, resuming training...")
         
         while True:
             for row_idx in range(self.B):

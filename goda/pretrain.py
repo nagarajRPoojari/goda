@@ -190,7 +190,8 @@ class PreTrainer:
         self.model.train()
         train_start_time = time.perf_counter()
         accumulated_loss = 0.0
-        micro_step = 0
+        # When resuming, micro_step should align with the resumed step to maintain gradient accumulation sync
+        micro_step = self.start_step * self.config.gradient_accumulation_steps
         step = self.start_step
         
         resume_state = getattr(self, 'dataloader_state', None)
