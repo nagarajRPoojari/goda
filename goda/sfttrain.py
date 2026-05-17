@@ -16,13 +16,14 @@ from torch.optim import Optimizer
 
 
 class SFTTrainer:
-    def __init__(self, model: nn.Module, optimizer: Optimizer, dataloader: DistributedSFTDataloader, 
+    def __init__(self, model: nn.Module, optimizer: Optimizer, dataloader: DistributedSFTDataloader,
                  device: Device, config: Config, tokenizer: Any = None, eval_datasets: list | None = None) -> None:
         self.model = model
         self.optimizer = optimizer
         self.dataloader = dataloader
         self.device = device
         self.config = config
+        self.tokenizer = tokenizer
         self.process_info = self.device.process_info()
         self.is_main_process = self.process_info["is_main"]
         self.wandb_run = self._init_wandb()
@@ -225,6 +226,20 @@ class SFTTrainer:
 
                 if (step + 1) % self.config.eval_every_n_steps == 0 and step > 0:
                     self._run_evaluation(step=step, num_examples=100)
+                    
+                    if self.is_main_process and self.tokenizer:
+                        samples = self.dataloader.sample(num_samples=3)
+                        for i, sample in enumerate(samples, 1):
+                            with torch.no_grad():
+                                input_tensor = sample['input_tokens'].unsqueeze(0).to(self.device.device)
+                                logits = self.model(input_tensor)
+                                pred_tokens = logits.argmax(dim=-1).squeeze(0)
+                                pred_str = self.tokenizer.decode(pred_tokens.unsqueeze(0))[0]
+                            
+                            logger.info(f"Sample {i}:")
+                            logger.info(f"Input:  ...{sample['input_str'][-100:]}")
+                            logger.info(f"Target: ...{sample['target_str'][-100:]}")
+                            logger.info(f"Pred:   ...{pred_str[-100:]}")
                 
                 if self.is_main_process and self.config.save_checkpoint_every_n_steps is not None:
                     if (step + 1) % self.config.save_checkpoint_every_n_steps == 0 and step > 0:

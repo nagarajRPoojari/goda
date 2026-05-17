@@ -260,8 +260,39 @@ class DistributedPretrainDataloader(DistributedDataloader):
         self.current_rg_idx = state.get('rg_idx', self.rank)
         self.batches_consumed = state.get('batches_consumed', 0)
 
-    def sample(self):
-        ...
+    def sample(self, num_samples: int = 1):
+        import random
+        shards = self.train_shards if self.train_shards else self.val_shards
+        if not shards:
+            return []
+        
+        samples = []
+        for _ in range(num_samples):
+            shard_path = random.choice(shards)
+            pf = pq.ParquetFile(shard_path)
+            rg_idx = random.randint(0, pf.num_row_groups - 1)
+            rg = pf.read_row_group(rg_idx)
+            texts = rg.column('text').to_pylist()
+            text = random.choice(texts)
+            
+            tokens = self.tokenizer.encode([text], add_bos=True, add_eos=False, padding=False)[0]
+            if len(tokens) > self.T:
+                tokens = tokens[:self.T]
+            
+            input_tokens = tokens[:-1] if len(tokens) > 1 else tokens
+            target_tokens = tokens[1:] if len(tokens) > 1 else tokens
+            
+            input_str = self.tokenizer.decode(input_tokens.unsqueeze(0))[0]
+            target_str = self.tokenizer.decode(target_tokens.unsqueeze(0))[0]
+            
+            samples.append({
+                'input_tokens': input_tokens,
+                'target_tokens': target_tokens,
+                'input_str': input_str,
+                'target_str': target_str
+            })
+        
+        return samples
 
 class DistributedSFTDataloader(DistributedDataloader):
     def __init__(self, device: Device, config: Config, tokenizer: Tokenizer, datasets: list[SFTDataset], shuffle: bool = True) -> None:
@@ -343,5 +374,32 @@ class DistributedSFTDataloader(DistributedDataloader):
     def set_state(self, state: dict) -> None:
         pass
 
-    def sample(self):
-        ...
+    def sample(self, num_samples: int = 1):
+        import random
+        samples = []
+        
+        for _ in range(num_samples):
+            ds_idx = random.randint(0, len(self.datasets) - 1)
+            example_idx = random.randint(0, len(self.datasets[ds_idx]) - 1)
+            
+            conversation = self.datasets[ds_idx][example_idx]
+            ids, mask = self.tokenizer.render_conversation(conversation, self.max_tokens)
+            
+            if len(ids) > self.T:
+                ids = ids[:self.T]
+                mask = mask[:self.T]
+            
+            input_tokens = torch.tensor(ids[:-1] if len(ids) > 1 else ids, dtype=torch.long)
+            target_tokens = torch.tensor(ids[1:] if len(ids) > 1 else ids, dtype=torch.long)
+            
+            input_str = self.tokenizer.decode(input_tokens.unsqueeze(0))[0]
+            target_str = self.tokenizer.decode(target_tokens.unsqueeze(0))[0]
+            
+            samples.append({
+                'input_tokens': input_tokens,
+                'target_tokens': target_tokens,
+                'input_str': input_str,
+                'target_str': target_str
+            })
+        
+        return samples
