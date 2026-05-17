@@ -1,7 +1,7 @@
 embed_dim: 768
 hidden_dim: 3072
 seq_length: 512
-vocab_size: 50269
+vocab_size: 50267
 n_layers: 12
 n_heads: 6
 n_kv_heads: 6

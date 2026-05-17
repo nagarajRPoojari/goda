@@ -1,6 +1,6 @@
 import torch
 import time
-from abc import ABC
+from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Iterator, Generator, Tuple, List, Union
 from goda.device import Device
@@ -9,22 +9,27 @@ from goda.tokenizer import Tokenizer
 from goda.config import Config
 import pyarrow.parquet as pq
 from goda.logger import logger
+from goda.sampler import Sampler
 
-class DistributedDataloader(ABC):
+class DistributedDataloader(Sampler, ABC):
     def __init__(self, device: Device, data_dir: str,  batch_size: int, seq_len: int, tokenizer: Tokenizer) -> None:
         self.device = device
         self.data_dir = Path(data_dir)
         self.B = batch_size
         self.T = seq_len
         self.tokenizer = tokenizer
+
+    @abstractmethod
     def batch_loader(self, split: str = "train", resume_state: dict | None = None) -> Generator[Tuple[torch.Tensor, ...], None, None]:
+        raise NotImplementedError
+    
+    @abstractmethod
+    def get_state(self) -> dict:
         ...
     
-    def get_state(self) -> dict:
-        return {}
-    
+    @abstractmethod
     def set_state(self, state: dict) -> None:
-        pass
+        ...
 
 class DistributedPretrainDataloader(DistributedDataloader):
     def __init__(self, device: Device, config: Config, tokenizer: Tokenizer,
@@ -255,6 +260,8 @@ class DistributedPretrainDataloader(DistributedDataloader):
         self.current_rg_idx = state.get('rg_idx', self.rank)
         self.batches_consumed = state.get('batches_consumed', 0)
 
+    def sample(self):
+        ...
 
 class DistributedSFTDataloader(DistributedDataloader):
     def __init__(self, device: Device, config: Config, tokenizer: Tokenizer, datasets: list[SFTDataset], shuffle: bool = True) -> None:
@@ -329,3 +336,12 @@ class DistributedSFTDataloader(DistributedDataloader):
             self.mask.copy_(self.cpu_mask, non_blocking=self.device.is_cuda)
             
             yield self.inputs, self.targets, self.mask
+
+    def get_state(self) -> dict:
+        return {}
+    
+    def set_state(self, state: dict) -> None:
+        pass
+
+    def sample(self):
+        ...
