@@ -24,7 +24,7 @@ class Task(Enum):
     SCHEMA = "schema"
     LM = "language_modeling"
 
-
+# sample comment i am adding to see if lazygit works or not
 class Evaluator(ABC):
     
     def __init__(self, model: nn.Module, config: Config, device: Device):
