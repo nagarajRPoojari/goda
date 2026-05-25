@@ -1,3 +1,4 @@
+from ast import Tuple
 from ssl import ALERT_DESCRIPTION_HANDSHAKE_FAILURE
 from torch._C import dtype
 import triton #  pyright: ignore[import] ofcourse triton is not there in mac 
@@ -43,7 +44,7 @@ def _attn_forawrd_internal(
         # so, lo, hi = 0, SEQ_LEN 
         # hoping we will not have any weird attention only future tokens (top right matrix)
         lo, hi = 0, SEQ_LEN
-    
+
     # it's very confusing why we are moving by lo (BLOCK_SIZE_Q step size)
     # but it works 
     block_K_ptr = tl.advance(block_K_ptr, (0, lo)) 
@@ -66,13 +67,48 @@ def _attn_forawrd_internal(
         # GMEM to SMEM 
         block_K = tl.load(block_K_ptr)
         block_V = tl.load(block_V_ptr)
+
+        block_QK_T = tl.dot(block_Q, block_K) # block K already transposed
+
         
         # STAGE 2 means we are at transition diagonal, be careful to apply mask 
-        if STAGE = 2:
+        if STAGE == 2:
+            # offset_Q_T                     : [12, 13, 14, ... 12 + BLOCK_SIZE_Q]
+            # offset_Q_T[:, None]            : [[12], [13], [14], .. [12 + BLOCK_SIZE_Q]]
+            # offset_KV_T                    : [10, 11, 12, ... 10 + BLOCK_SIZE_KV]
+            # offset_KV_T[None, :]           : [[10, 11, 12, .. 10 + BLOCK_SIZE_KV]]
             mask = offset_Q_T[:, None] >= (start_kv + offset_KV_T[None, :]) 
+            block_QK_T = block_QK_T * tau + tl.where(mask, 0, -1.0e6)
+            m_ij = tl.maximum(m_i, tl.max(block_QK_T, 1)) # row max
+            block_QK_T -= m_ij[:, None]
 
+        else:
+            m_ij = tl.maximum(m_i, tl.max(block_QK_T, 1) * tau)
+            block_QK_T = block_QK_T * tau - m_ij[:, None]
 
+        # exp(qk_ij - m_ij): [BLOCK_SIZE_Q, BLOCK_SIZE_KV]
+        block_P = tl.math.exp(block_QK_T)
 
+        # row sum (exp(qk_ij - m_ij)): [BLOCK_SIZE_KV]
+        l_ij = tl.sum(block_P, 1)
+
+        # correction factor
+        alpha = tl.math.exp(m_i - m_ij)
+
+        block_P = block_P.to(tl.float16)
+   
+        # l_i = l_i * exp(m_i - m_ij) + l_ij 
+        l_i = l_i * alpha + l_ij 
+        # O = O_old * alpha + PV 
+        block_O = block_O * alpha[:, None]
+        O_block = tl.dot(block_P, block_V, block_O)
+
+        m_i = m_ij
+
+        block_K_ptr = tl.advance(block_K_ptr, (0, BLOCK_SIZE_KV))
+        block_V_ptr = tl.advance(block_V_ptr, (BLOCK_SIZE_KV, 0))
+
+    return block_O, l_i, m_i 
 # stride of ith dimension: how much step i need to take to move from j to j+1 in ith dim
 #   it is simply product of its inner dims
 @triton.jit
