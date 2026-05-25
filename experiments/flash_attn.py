@@ -1,4 +1,5 @@
 from ast import Tuple
+from operator import index
 from ssl import ALERT_DESCRIPTION_HANDSHAKE_FAILURE
 from torch._C import dtype
 import triton #  pyright: ignore[import] ofcourse triton is not there in mac 
@@ -108,7 +109,9 @@ def _attn_forawrd_internal(
         block_K_ptr = tl.advance(block_K_ptr, (0, BLOCK_SIZE_KV))
         block_V_ptr = tl.advance(block_V_ptr, (BLOCK_SIZE_KV, 0))
 
-    return block_O, l_i, m_i 
+    return block_O, l_i, m_i
+
+
 # stride of ith dimension: how much step i need to take to move from j to j+1 in ith dim
 #   it is simply product of its inner dims
 @triton.jit
@@ -205,15 +208,60 @@ def _attn_forward_kernel(
     
     # accumulator for final output block in SMEM
     # idea is to keep an accumulator at SMEM and the dump it to block_O_ptr in GMEM
-    block_Q = tl.zeros([BLOCK_SIZE_Q, HEAD_DIM], dtype=tl.float32)
+    block_O = tl.zeros([BLOCK_SIZE_Q, HEAD_DIM], dtype=tl.float32)
 
     block_Q = tl.load(block_Q_ptr)
 
     if STAGE == 1 or STAGE == 3:
         # first forward pass that handles lower triangle attention calculation
         # and it is common for both causal and non-causal
+         block_O, l_i, m_i = _attn_forawrd_internal(
+            block_O         = block_O,
+            l_i             = l_i,
+            m_i             = m_i,
+            block_Q         =block_Q,
+            block_K_ptr     = block_K_ptr,
+            block_V_ptr     = block_V_ptr,
+            index_Q_block   = index_Q_block,
+            tau             = tau,
+            BLOCK_SIZE_Q    = BLOCK_SIZE_Q,
+            BLOCK_SIZE_KV   = BLOCK_SIZE_KV,
+            STAGE           = 4 - STAGE,
+            offset_Q_T      = offset_Q_T,
+            offset_KV_T     = offset_KV_T,
+            SEQ_LEN         =  SEQ_LEN,
+        )
+
+    if STAGE == 3:
         
-        
+        block_O, l_i, m_i = _attn_forawrd_internal(
+            block_O         = block_O,
+            l_i             = l_i,
+            m_i             = m_i,
+            block_Q         =block_Q,
+            block_K_ptr     = block_K_ptr,
+            block_V_ptr     = block_V_ptr,
+            index_Q_block   = index_Q_block,
+            tau             = tau,
+            BLOCK_SIZE_Q    = BLOCK_SIZE_Q,
+            BLOCK_SIZE_KV   = BLOCK_SIZE_KV,
+            STAGE           = 4 - STAGE,
+            offset_Q_T      = offset_Q_T,
+            offset_KV_T     = offset_KV_T,
+            SEQ_LEN         =  SEQ_LEN,
+        )
+
+    # logSumExp: m_i + log(l_i)
+    m_i += tl.math.log(l_i)
+    block_M_ptrs = M + index_Q_batch_head * SEQ_LEN + offset_Q_T
+    tl.store(block_M_ptrs, m_i)
+    
+
+    block_O = block_O / l_i[:, None]
+    # internal computations might have elevated type of block_O to say float32, 
+    # save it as original type
+    tl.store(block_O_ptr, block_O.to(O.type.element_ty))
+
 
 
 # torch treats autograd functions just like derivable funcs, 
@@ -242,6 +290,43 @@ class FlashAttention(torch.autograd.Function):
         M  = torch.empty((BATCH_SIZE, NUM_HEADS, SEQ_LEN), device=Q.device, dtype=torch.float32)
         
 
+        _attn_forward_kernel[grid](
+            Q=Q,
+            K=K,
+            V=V,
+            tau=tau,
+            M=M,
+            O=O,
+            stride_Q_batch=Q.stride(0),
+            stride_Q_head=Q.stride(1),
+            stride_Q_seq=Q.stride(2),
+            stride_Q_dim=Q.stride(3),
+            stride_K_batch=K.stride(0),
+            stride_K_head=K.stride(1),
+            stride_K_seq=K.stride(2),
+            stride_K_dim=K.stride(3),
+            stride_V_batch=V.stride(0),
+            stride_V_head=V.stride(1),
+            stride_V_seq=V.stride(2),
+            stride_V_dim=V.stride(3),
+            stride_O_batch=O.stride(0),
+            stride_O_head=O.stride(1),
+            stride_O_seq=O.stride(2),
+            stride_O_dim=O.stride(3),
+            BATCH_SIZE=Q.shape[0],
+            NUM_HEADS=Q.shape[1],
+            SEQ_LEN=Q.shape[2],
+            HEAD_DIM=HEAD_DIM_K,
+            STAGE=stage,
+        )
+
+        ctx.save_for_backward(Q, K, V, O, M)
+        ctx.grid = grid
+        ctx.tau = tau
+        ctx.HEAD_DIM = ctx.HEAD_DIM
+        ctx.causal = ctx.causal
+
+        return O
         
 
     @staticmethod
