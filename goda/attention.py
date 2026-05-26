@@ -8,8 +8,10 @@ import torch.nn.functional as F
 from goda.kvcache import KVCache
 
 class FlashAttention(nn.Module):
-    def __init__(self):
+    def __init__(self, use_custom_fa: bool = True):
         super().__init__()
+        self.use_custom_fa = use_custom_fa
+        self._custom_fa: Any | None = self._load_custom_flash_attention() if use_custom_fa else None
         self._fa3: Any | None = self._load_flash_attention_3()
 
     def forward( self, q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, causal: bool = False, window_size: tuple[int, int] = (-1, -1), kv_cache: KVCache | None = None) -> torch.Tensor:
@@ -17,6 +19,15 @@ class FlashAttention(nn.Module):
             return self._attention(q, k, v, causal=causal, window_size=window_size)
         
         return self._attention_with_kvcache( q=q, k=k, v=v, kv_cache=kv_cache, causal=causal, window_size=window_size)
+
+    def _load_custom_flash_attention(self):
+        if not torch.cuda.is_available():
+            return None
+        try:
+            from kernels.flash_attn import FlashAttentionKernel  # pyright: ignore[reportMissingImports]
+            return FlashAttentionKernel
+        except Exception:
+            return None
 
     def _load_flash_attention_3(self):
         if not torch.cuda.is_available():
@@ -33,15 +44,29 @@ class FlashAttention(nn.Module):
             return None
             
 
+    def _use_custom_fa(self, q: torch.Tensor) -> bool:
+        return self._custom_fa is not None and q.is_cuda and q.dtype in [torch.float16, torch.bfloat16]
+
     def _use_fa3(self, q: torch.Tensor) -> bool:
         return self._fa3 is not None and q.is_cuda and q.dtype == torch.bfloat16
 
     def _attention(self, q: torch.Tensor ,k: torch.Tensor, v: torch.Tensor, causal: bool, window_size: tuple[int, int]) -> torch.Tensor:
+        # Try custom flash attention first if enabled
+        if self.use_custom_fa and self._use_custom_fa(q) and window_size == (-1, -1):
+            custom_fa = self._custom_fa
+            assert custom_fa is not None
+            # Calculate softmax scale (tau)
+            head_dim = q.shape[-1]
+            tau = 1.0 / (head_dim ** 0.5)
+            return custom_fa.apply(q, k, v, causal, tau)
+        
+        # Fall back to FA3 if available
         if self._use_fa3(q):
             fa3 = self._fa3
             assert fa3 is not None
             return fa3.flash_attn_func(q, k, v, causal=causal, window_size=window_size)
 
+        # Fall back to SDPA
         q_sdpa = q.transpose(1, 2)
         k_sdpa = k.transpose(1, 2)
         v_sdpa = v.transpose(1, 2)
