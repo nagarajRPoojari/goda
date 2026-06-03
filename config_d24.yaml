@@ -1,6 +1,6 @@
 embed_dim: 1536
 hidden_dim: 6144
-seq_length: 2048
+seq_length: 1024
 vocab_size: 50267
 n_layers: 24
 n_heads: 12
@@ -12,7 +12,7 @@ mixed_precision: true
 use_meta_device: true
 compile_model: true
 data_dir: data/climbmix
-batch_size: 64
+batch_size: 16
 buffer_size: 1000
 tokenizer_batch_size: 128
 train_num_steps: 17280
@@ -21,7 +21,7 @@ log_every_n_steps: 1
 eval_every_n_steps: 100
 eval_num_steps: 10
 core_eval_every_n_step: 500
-gradient_accumulation_steps: 8
+gradient_accumulation_steps: 16
 checkpoint_dir: checkpoints
 save_checkpoint_every_n_steps: 200
 keep_last_n_checkpoints: 1

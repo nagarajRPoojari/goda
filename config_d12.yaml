@@ -3,7 +3,7 @@ hidden_dim: 3072
 seq_length: 512
 vocab_size: 50267
 n_layers: 12
-n_heads: 6
+n_heads: 12
 n_kv_heads: 6
 head_dim: 128
 rope_base_theta: 100000
@@ -12,21 +12,21 @@ mixed_precision: true
 use_meta_device: true
 compile_model: true
 data_dir: data/climbmix
-batch_size: 2
+batch_size: 64
 buffer_size: 1000
 tokenizer_batch_size: 128
 train_num_steps: 1080
 grad_clip: 1.0
-log_every_n_steps: 2
-eval_every_n_steps: 4
+log_every_n_steps: 10
+eval_every_n_steps: 100
 eval_num_steps: 10
-core_eval_every_n_step: 8
-gradient_accumulation_steps: 2
+core_eval_every_n_step: 500
+gradient_accumulation_steps: 8
 checkpoint_dir: checkpoints
 save_checkpoint_every_n_steps: 200
 keep_last_n_checkpoints: 1
-# resume_from_checkpoint: "checkpoints/checkpoint_best.pt"
-load_best_checkpoint: true
+resume_from_checkpoint: null
+load_best_checkpoint: false
 wandb_enabled: true
 wandb_project: goda
 wandb_run_name: null

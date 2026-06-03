@@ -51,7 +51,7 @@ class GroupedQueryAttention(nn.Module):
         self.n_kv_heads = cfg.n_kv_heads
         self.head_dim = cfg.head_dim
         self.window_size = window_size
-        self.attention = FlashAttention()
+        self.attention = FlashAttention(use_custom_fa=True)
         
         self.wq = nn.Linear(cfg.embed_dim, self.n_heads * self.head_dim, bias=False, dtype=cfg.dtype)
         self.wk = nn.Linear(cfg.embed_dim, self.n_kv_heads * self.head_dim, bias=False, dtype=cfg.dtype)

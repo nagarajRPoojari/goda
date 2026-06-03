@@ -373,20 +373,6 @@ def _attn_forward_internal(
 
 # stride of ith dimension: how much step i need to take to move from j to j+1 in ith dim
 # it is simply product of its inner dims
-@triton.autotune(
-    [
-        triton.Config(
-            {"BLOCK_SIZE_Q": BLOCK_SIZE_Q, "BLOCK_SIZE_KV": BLOCK_SIZE_KV},
-            num_stages=num_stages,
-            num_warps=num_warps,
-        )
-        for BLOCK_SIZE_Q in [64, 128]
-        for BLOCK_SIZE_KV in [32, 64]
-        for num_stages in ([3, 4, 7])
-        for num_warps in [2, 4]
-    ],
-    key=["SEQ_LEN", "HEAD_DIM"],
-)
 @triton.jit
 def _attn_forward_kernel(
     Q, # [B, H, T, D]    
@@ -539,7 +525,7 @@ def _attn_forward_kernel(
 
 # torch treats autograd functions just like derivable funcs, 
 # passes dO and expects dQ, dK, dV
-class FlashAttentionKernel(torch.autograd.Function):
+class FlashAttention(torch.autograd.Function):
     # conventions: 
     # D -> head dimension
     # H -> number of heads 
@@ -735,7 +721,7 @@ def test_op(BATCH_SIZE, NUM_HEADS, SEQ_LEN, HEAD_DIM, causal, dtype=torch.float1
     ref_dQ, Q.grad = Q.grad.clone(), None # type: ignore
 
     # triton implementation
-    tri_out = FlashAttentionKernel.apply(Q, K, V, causal, softmax_scale).half()
+    tri_out = FlashAttention.apply(Q, K, V, causal, softmax_scale).half()
     tri_out.backward(dO)
     tri_dV, V.grad = V.grad.clone(), None # type: ignore
     tri_dK, K.grad = K.grad.clone(), None # type: ignore
@@ -750,7 +736,7 @@ def test_op(BATCH_SIZE, NUM_HEADS, SEQ_LEN, HEAD_DIM, causal, dtype=torch.float1
     assert torch.allclose(ref_dQ, tri_dQ, atol=atol, rtol=rtol)
     
     # Benchmark
-    ms = triton.testing.do_bench(lambda: FlashAttentionKernel.apply(Q, K, V, causal, softmax_scale).half().backward(dO))
+    ms = triton.testing.do_bench(lambda: FlashAttention.apply(Q, K, V, causal, softmax_scale).half().backward(dO))
     
     # FLOPs for attention: 2 * B * H * T^2 * D (QK^T) + 2 * B * H * T^2 * D (softmax*V) = 4*B*H*T^2*D per pass
     # Forward + Backward ≈ 2.5x forward FLOPs (backward computes dQ, dK, dV)

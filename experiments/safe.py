@@ -1,10 +1,6 @@
-from ast import Tuple
-from operator import index
-from ssl import ALERT_DESCRIPTION_HANDSHAKE_FAILURE
-from torch._C import dtype
-import triton #  pyright: ignore[import] ofcourse triton is not there in mac 
+import triton #  type: ignore pyright: ignore[import] ofcourse triton is not there in mac 
 import torch 
-import triton.language as tl # pyright: ignore[import] ofcourse triton is not there in mac 
+import triton.language as tl # type: ignore pyright: ignore[import] ofcourse triton is not there in mac 
 
 
 @triton.jit
@@ -74,19 +70,20 @@ def _attn_backward_dK_dV(
     index_batch = index_batch_head // NUM_HEADS
     index_head = index_batch_head % NUM_HEADS
 
-    offset_BH = (index_batch_head * SEQ_LEN * HEAD_DIM).to(tl.int64)
-    offset_BH_ =(index_batch_head * SEQ_LEN).to(tl.int64)
+    offset_B_H = (stride_batch * index_batch + stride_head * index_head).to(tl.int64)
+    offset_B_H_T = (index_batch_head * SEQ_LEN).to(tl.int64)
 
-    # skip blocks and heads 
-    Q += offset_BH
-    K += offset_BH
-    V += offset_BH
-    dQ += offset_BH
-    dK += offset_BH
-    dV += offset_BH
+    # skip blocks and heads
+    Q += offset_B_H
+    K += offset_B_H
+    V += offset_B_H
+    dO += offset_B_H
+    dQ += offset_B_H
+    dK += offset_B_H
+    dV += offset_B_H
 
-    M += offset_BH_
-    D += offset_BH_
+    M += offset_B_H_T
+    D += offset_B_H_T
 
     offset_D = tl.arange(0, HEAD_DIM)
 
@@ -120,39 +117,39 @@ def _attn_backward_dK_dV(
 
     curr_offset_Q_T = 0
     for q_i in range(SEQ_LEN // BLOCK_SIZE_Q):
+        # Update offset BEFORE loading
+        offset_Q_T = curr_offset_Q_T + tl.arange(0, BLOCK_SIZE_Q)
 
         block_Qt = tl.load(block_Qt_ptr)
-        # we dont need one more offset_D since shape of M is [BATCH_SIZE, NUM_HEADS, SEQ_LEN] only 
+        # we dont need one more offset_D since shape of M is [BATCH_SIZE, NUM_HEADS, SEQ_LEN] only
         m_i = tl.load(M + offset_Q_T)
         block_dO = tl.load(block_dO_ptr)
         # delta D = rowsum(dO * O)
         block_D = tl.load(D + offset_Q_T)
-
-        offset_Q_T= curr_offset_Q_T + tl.arange(0, BLOCK_SIZE_Q)
         
         # we need (QK^T)^T = (K^T)^T (Q^T) = K(Q^T)
         block_QKt = tau * tl.dot(block_K, block_Qt)
         block_Pt = tl.math.exp(block_QKt - m_i[None, :])
 
         if STAGE == 3:
-            # causal mask 
+            # causal mask
             mask = (offset_Q_T[None, :] >=  offset_KV_T[:, None])
             block_Pt = tl.where(mask, block_Pt, 0.0)
 
-        # accumulate dV 
-        # from FA1 dV <- dV + P^T dO 
+        # accumulate dV
+        # from FA1 dV <- dV + P^T dO
         block_dV += tl.dot(block_Pt.to(tl.float16), block_dO)
         
-        # dP = dO * V^T 
-        # dP^T = V * dO^T 
-        block_dPt = tl.dot(block_V, tl.trans(block_dO).to(tl.float32))
+        # dP = dO * V^T
+        # dP^T = V * dO^T
+        block_dPt = tl.dot(block_V, tl.trans(block_dO)).to(tl.float32)
 
-        # dS = P * (dP - D)  note: * is hadamard product here 
+        # dS = P * (dP - D)  note: * is hadamard product here
         # => dS^T = P^T * (dP^T - D^T)
         block_dSt = block_Pt * (block_dPt - block_D[None, :])
         block_dSt = block_dSt.to(tl.float16)
 
-        # dK <= dK + dS^T * Q 
+        # dK <= dK + dS^T * Q
         block_dK += tau * tl.dot(block_dSt, tl.trans(block_Qt))
 
 
@@ -198,19 +195,20 @@ def _attn_backward_dQ(
     index_batch_head = tl.program_id(2)
     index_batch = index_batch_head // NUM_HEADS
     index_head = index_batch_head % NUM_HEADS
-    offset_BH = (index_batch_head * SEQ_LEN * HEAD_DIM).to(tl.int64)
-    offset_BH_ =(index_batch_head * SEQ_LEN).to(tl.int64)
+    offset_B_H = (stride_batch * index_batch + stride_head * index_head).to(tl.int64)
+    offset_B_H_T = (index_batch_head * SEQ_LEN).to(tl.int64)
 
-    # skip blocks and heads 
-    Q += offset_BH
-    K += offset_BH
-    V += offset_BH
-    dQ += offset_BH
-    dK += offset_BH
-    dV += offset_BH
+    # skip blocks and heads
+    Q += offset_B_H
+    K += offset_B_H
+    V += offset_B_H
+    dO += offset_B_H
+    dQ += offset_B_H
+    dK += offset_B_H
+    dV += offset_B_H
 
-    M += offset_BH_
-    D += offset_BH_
+    M += offset_B_H_T
+    D += offset_B_H_T
 
     # load scales
     offset_D = tl.arange(0, HEAD_DIM)
@@ -269,7 +267,7 @@ def _attn_backward_dQ(
 
 
 @triton.jit
-def _attn_forawrd_internal(
+def _attn_forward_internal(
     block_O,
     l_i,
     m_i,
@@ -296,7 +294,7 @@ def _attn_forawrd_internal(
         lo, hi = 0, index_Q_block * BLOCK_SIZE_Q
     elif STAGE == 2:
         lo, hi = index_Q_block * BLOCK_SIZE_Q, (index_Q_block + 1) * BLOCK_SIZE_Q
-        lo = tl.multiple_of(BLOCK_SIZE_Q) # seems to be hack that allows triton to optimize better : TODO: figure out how ?
+        lo = tl.multiple_of(lo, BLOCK_SIZE_Q) # seems to be hack that allows triton to optimize better : TODO: figure out how ?
     else: 
         # upper right corner 
         # only applicable for non-causal
@@ -351,7 +349,7 @@ def _attn_forawrd_internal(
         # exp(qk_ij - m_ij): [BLOCK_SIZE_Q, BLOCK_SIZE_KV]
         block_P = tl.math.exp(block_QK_T)
 
-# row sum (exp(qk_ij - m_ij)): [BLOCK_SIZE_KV]
+        # row sum (exp(qk_ij - m_ij)): [BLOCK_SIZE_KV]
         l_ij = tl.sum(block_P, 1)
 
         # correction factor
@@ -359,11 +357,11 @@ def _attn_forawrd_internal(
 
         block_P = block_P.to(tl.float16)
    
-        # l_i = l_i * exp(m_i - m_ij) + l_ij 
-        l_i = l_i * alpha + l_ij 
-        # O = O_old * alpha + PV 
+        # l_i = l_i * exp(m_i - m_ij) + l_ij
+        l_i = l_i * alpha + l_ij
+        # O = O_old * alpha + PV
         block_O = block_O * alpha[:, None]
-        O_block = tl.dot(block_P, block_V, block_O)
+        block_O = tl.dot(block_P, block_V, block_O)
 
         m_i = m_ij
 
@@ -374,7 +372,7 @@ def _attn_forawrd_internal(
 
 
 # stride of ith dimension: how much step i need to take to move from j to j+1 in ith dim
-#   it is simply product of its inner dims
+# it is simply product of its inner dims
 @triton.jit
 def _attn_forward_kernel(
     Q, # [B, H, T, D]    
@@ -399,8 +397,8 @@ def _attn_forward_kernel(
     stride_O_H,
     stride_O_T,
     stride_O_D,
-    BACTH_SIZE,
-    NUM_HEAD: tl.constexpr,
+    BATCH_SIZE,
+    NUM_HEADS: tl.constexpr,
     SEQ_LEN: tl.constexpr,
     HEAD_DIM: tl.constexpr,
     BLOCK_SIZE_Q: tl.constexpr,
@@ -410,10 +408,10 @@ def _attn_forward_kernel(
 
     index_Q_block = tl.program_id(0)
     index_Q_batch_head = tl.program_id(1)
-    index_Q_batch = index_Q_batch_head //  NUM_HEAD
-    index_Q_head = index_Q_batch_head % NUM_HEAD
+    index_Q_batch = index_Q_batch_head //  NUM_HEADS
+    index_Q_head = index_Q_batch_head % NUM_HEADS
     
-    offset_QKV_T = (index_Q_batch.to(tl.int64) * stride_Q_B + index_Q_head * stride_Q_H)
+    offset_QKV_T = (index_Q_batch.to(tl.int64) * stride_Q_B + index_Q_head.to(tl.int64) * stride_Q_H)
 
     block_Q_ptr = tl.make_block_ptr(
         base        =  Q + offset_QKV_T, # [None, None, 0, 0]
@@ -439,11 +437,11 @@ def _attn_forward_kernel(
     block_K_ptr = tl.make_block_ptr(
         base        =  K + offset_QKV_T, # [None, None, 0, 0]
         shape       = (HEAD_DIM, SEQ_LEN),
-        # we will load K as K
+        # we will load K as K^T
         strides     = (stride_K_D, stride_K_T),
         offsets     = (0, 0),
-        block_shape = (BLOCK_SIZE_KV, HEAD_DIM),
-        order       = (1, 0), # TODO: idk
+        block_shape = (HEAD_DIM, BLOCK_SIZE_KV),
+        order       = (0, 1), # TODO: idk
     )
 
     # Output block will share same shape as Q 
@@ -476,7 +474,7 @@ def _attn_forward_kernel(
     if STAGE == 1 or STAGE == 3:
         # first forward pass that handles lower triangle attention calculation
         # and it is common for both causal and non-causal
-         block_O, l_i, m_i = _attn_forawrd_internal(
+         block_O, l_i, m_i = _attn_forward_internal(
             block_O         = block_O,
             l_i             = l_i,
             m_i             = m_i,
@@ -495,7 +493,7 @@ def _attn_forward_kernel(
 
     if STAGE == 3:
         
-        block_O, l_i, m_i = _attn_forawrd_internal(
+        block_O, l_i, m_i = _attn_forward_internal(
             block_O         = block_O,
             l_i             = l_i,
             m_i             = m_i,
@@ -506,7 +504,7 @@ def _attn_forward_kernel(
             tau             = tau,
             BLOCK_SIZE_Q    = BLOCK_SIZE_Q,
             BLOCK_SIZE_KV   = BLOCK_SIZE_KV,
-            STAGE           = 4 - STAGE,
+            STAGE           = 2,
             offset_Q_T      = offset_Q_T,
             offset_KV_T     = offset_KV_T,
             SEQ_LEN         =  SEQ_LEN,
@@ -541,57 +539,65 @@ class FlashAttention(torch.autograd.Function):
 
 
         # output O will be of same shape as Q [B, H, T, D]
-        O = torch.empty_like(Q) 
+        O = torch.empty_like(Q)
         
-        stage = 3 if causal else 1 
+        stage = 3 if causal else 1
 
-        grid = lambda args: (torch.cdiv(SEQ_LEN, args["BLOCK_SIZE_Q"]), BATCH_SIZE * NUM_HEADS)
+        # Fixed block sizes (removed autotune overhead)
+        BLOCK_SIZE_Q = 64
+        BLOCK_SIZE_KV = 32
+
+        grid = (triton.cdiv(SEQ_LEN, BLOCK_SIZE_Q), BATCH_SIZE * NUM_HEADS)
         
         # M is logSumExp: TODO: exact formula for logSumExp
         M  = torch.empty((BATCH_SIZE, NUM_HEADS, SEQ_LEN), device=Q.device, dtype=torch.float32)
         
 
-        _attn_forward_kernel[grid](
+        _attn_forward_kernel[grid]( # type: ignore
             Q               = Q,
             K               = K,
             V               = V,
             tau             = tau,
             M               = M,
             O               = O,
-            stride_Q_batch  = Q.stride(0),
-            stride_Q_head   = Q.stride(1),
-            stride_Q_seq    = Q.stride(2),
-            stride_Q_dim    = Q.stride(3),
-            stride_K_batch  = K.stride(0),
-            stride_K_head   = K.stride(1),
-            stride_K_seq    = K.stride(2),
-            stride_K_dim    = K.stride(3),
-            stride_V_batch  = V.stride(0),
-            stride_V_head   = V.stride(1),
-            stride_V_seq    = V.stride(2),
-            stride_V_dim    = V.stride(3),
-            stride_O_batch  = O.stride(0),
-            stride_O_head   = O.stride(1),
-            stride_O_seq    = O.stride(2),
-            stride_O_dim    = O.stride(3),
+            stride_Q_B  = Q.stride(0),
+            stride_Q_H  = Q.stride(1),
+            stride_Q_T    = Q.stride(2),
+            stride_Q_D    = Q.stride(3),
+            stride_K_B  = K.stride(0),
+            stride_K_H   = K.stride(1),
+            stride_K_T    = K.stride(2),
+            stride_K_D   = K.stride(3),
+            stride_V_B  = V.stride(0),
+            stride_V_H   = V.stride(1),
+            stride_V_T    = V.stride(2),
+            stride_V_D   = V.stride(3),
+            stride_O_B  = O.stride(0),
+            stride_O_H   = O.stride(1),
+            stride_O_T    = O.stride(2),
+            stride_O_D   = O.stride(3),
             BATCH_SIZE      = Q.shape[0],
             NUM_HEADS       = Q.shape[1],
             SEQ_LEN         = Q.shape[2],
             HEAD_DIM        = HEAD_DIM_K,
+            BLOCK_SIZE_Q    = BLOCK_SIZE_Q,
+            BLOCK_SIZE_KV   = BLOCK_SIZE_KV,
             STAGE           = stage,
+            num_warps       = 4,
+            num_stages      = 2,
         )
 
         ctx.save_for_backward(Q, K, V, O, M)
         ctx.grid = grid
         ctx.tau = tau
-        ctx.HEAD_DIM = ctx.HEAD_DIM
-        ctx.causal = ctx.causal
+        ctx.HEAD_DIM = HEAD_DIM_K
+        ctx.causal = causal
 
         return O
         
 
     @staticmethod
-    def backward(ctx, dO) :
+    def backward(ctx, dO) : # type: ignore
         
         Q, K, V, O, M = ctx.saved_tensors
 
@@ -601,15 +607,15 @@ class FlashAttention(torch.autograd.Function):
 
         BATCH_SIZE, NUM_HEADS, SEQ_LEN, HEAD_DIM = Q.shape
 
-        NUM_WARPS, NUM_STAGES = 4, 3
-        BLOCK_SIZE_MICRO, BLOCK_SIZE_MACRO = 32, 128 
+        NUM_WARPS, NUM_STAGES = 4, 2
+        BLOCK_SIZE_MICRO, BLOCK_SIZE_MACRO = 32, 64
 
         # calculating D (per row) which will be used to calculate dS & then dQ, dV
         # D = rowsum(dO · O) note: its hadamard product
         p_grid = (SEQ_LEN // BLOCK_SIZE_MACRO, BATCH_SIZE * NUM_HEADS)
         D = torch.empty_like(M) # [BATCH_SIZE, NUM_HEADS, SEQ_LEN]
         
-        _attn_backward_preprocess_D[p_grid](
+        _attn_backward_preprocess_D[p_grid]( # type: ignore
             O               = O,
             dO              = dO,
             D               = D,
@@ -621,7 +627,7 @@ class FlashAttention(torch.autograd.Function):
         grid = (SEQ_LEN // BLOCK_SIZE_MACRO, 1, BATCH_SIZE * NUM_HEADS)
         stage = 3 if ctx.causal else 1 
 
-        _attn_backward_dK_dV[grid](
+        _attn_backward_dK_dV[grid]( # type: ignore
             Q               = Q,
             K               = K,
             V               = V,
@@ -638,8 +644,8 @@ class FlashAttention(torch.autograd.Function):
             stride_dim      = Q.stride(3),
             NUM_HEADS       = NUM_HEADS,
             SEQ_LEN         = SEQ_LEN,
-            BLOCK_Q         = BLOCK_SIZE_MICRO,
-            BLOCK_KV        = BLOCK_SIZE_MACRO,
+            BLOCK_SIZE_Q    = BLOCK_SIZE_MICRO,
+            BLOCK_SIZE_KV   = BLOCK_SIZE_MACRO,
             HEAD_DIM        = ctx.HEAD_DIM,
             STAGE           = stage,
             num_warps       = NUM_WARPS,
@@ -647,7 +653,7 @@ class FlashAttention(torch.autograd.Function):
         )
     
 
-        _attn_backward_dQ[grid](
+        _attn_backward_dQ[grid]( # type: ignore
             Q               = Q,
             K               = K,
             V               = V,
@@ -664,8 +670,8 @@ class FlashAttention(torch.autograd.Function):
             stride_dim      = Q.stride(3),
             NUM_HEADS       = NUM_HEADS,
             SEQ_LEN         = SEQ_LEN,
-            BLOCK_Q         = BLOCK_SIZE_MACRO,
-            BLOCK_KV        = BLOCK_SIZE_MICRO,
+            BLOCK_SIZE_Q    = BLOCK_SIZE_MACRO,
+            BLOCK_SIZE_KV   = BLOCK_SIZE_MICRO,
             HEAD_DIM        = ctx.HEAD_DIM,
             STAGE           = stage,
             num_warps       = NUM_WARPS,
@@ -710,16 +716,16 @@ def test_op(BATCH_SIZE, NUM_HEADS, SEQ_LEN, HEAD_DIM, causal, dtype=torch.float1
     P = torch.softmax(P.float(), dim=-1).half()
     ref_O = torch.matmul(P, V)
     ref_O.backward(dO)
-    ref_dV, V.grad = V.grad.clone(), None
-    ref_dK, K.grad = K.grad.clone(), None
-    ref_dQ, Q.grad = Q.grad.clone(), None
+    ref_dV, V.grad = V.grad.clone(), None # type: ignore
+    ref_dK, K.grad = K.grad.clone(), None # type: ignore
+    ref_dQ, Q.grad = Q.grad.clone(), None # type: ignore
 
     # triton implementation
-    tri_out = TritonAttention.apply(Q, K, V, causal, softmax_scale).half()
+    tri_out = FlashAttention.apply(Q, K, V, causal, softmax_scale).half()
     tri_out.backward(dO)
-    tri_dV, V.grad = V.grad.clone(), None
-    tri_dK, K.grad = K.grad.clone(), None
-    tri_dQ, Q.grad = Q.grad.clone(), None
+    tri_dV, V.grad = V.grad.clone(), None # type: ignore
+    tri_dK, K.grad = K.grad.clone(), None # type: ignore
+    tri_dQ, Q.grad = Q.grad.clone(), None # type: ignore
 
     # compare
     rtol = 0.0
@@ -728,9 +734,17 @@ def test_op(BATCH_SIZE, NUM_HEADS, SEQ_LEN, HEAD_DIM, causal, dtype=torch.float1
     assert torch.allclose(ref_dK, tri_dK, atol=atol, rtol=rtol)
     assert torch.allclose(ref_dV, tri_dV, atol=atol, rtol=rtol)
     assert torch.allclose(ref_dQ, tri_dQ, atol=atol, rtol=rtol)
-
+    
+    # Benchmark
+    ms = triton.testing.do_bench(lambda: FlashAttention.apply(Q, K, V, causal, softmax_scale).half().backward(dO))
+    
+    # FLOPs for attention: 2 * B * H * T^2 * D (QK^T) + 2 * B * H * T^2 * D (softmax*V) = 4*B*H*T^2*D per pass
+    # Forward + Backward ≈ 2.5x forward FLOPs (backward computes dQ, dK, dV)
+    flops = 2.5 * 4 * BATCH_SIZE * NUM_HEADS * SEQ_LEN * SEQ_LEN * HEAD_DIM
+    tflops = flops / (ms * 1e-3) / 1e12
+    print(f"Time: {ms:.3f}ms, TFLOPS: {tflops:.2f}")
 
 if __name__ == "__main__":
+    # test_op(BATCH_SIZE=1, NUM_HEADS=2, SEQ_LEN=64, HEAD_DIM=64, causal=True)
     test_op(BATCH_SIZE=8, NUM_HEADS=16, SEQ_LEN=4096, HEAD_DIM=64, causal=True)
-    test_op(BATCH_SIZE=8, NUM_HEADS=16, SEQ_LEN=4096, HEAD_DIM=64, causal=False)
     print("PASSED")

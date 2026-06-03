@@ -41,6 +41,17 @@ def _attn_backward_preprocess_D(
     tl.store(block_D_ptr, block_D)
 
 
+@triton.autotune(
+    configs=[
+        triton.Config({'BLOCK_SIZE_Q': 32, 'BLOCK_SIZE_KV': 64}, num_warps=4, num_stages=2),
+        triton.Config({'BLOCK_SIZE_Q': 32, 'BLOCK_SIZE_KV': 64}, num_warps=8, num_stages=2),
+        triton.Config({'BLOCK_SIZE_Q': 32, 'BLOCK_SIZE_KV': 32}, num_warps=4, num_stages=2),
+        triton.Config({'BLOCK_SIZE_Q': 16, 'BLOCK_SIZE_KV': 64}, num_warps=4, num_stages=2),
+        triton.Config({'BLOCK_SIZE_Q': 16, 'BLOCK_SIZE_KV': 32}, num_warps=4, num_stages=2),
+        triton.Config({'BLOCK_SIZE_Q': 64, 'BLOCK_SIZE_KV': 128}, num_warps=8, num_stages=2),
+    ],
+    key=['SEQ_LEN', 'HEAD_DIM'],
+)
 @triton.jit
 def _attn_backward_dK_dV(
     Q,
@@ -138,23 +149,19 @@ def _attn_backward_dK_dV(
 
         # accumulate dV
         # from FA1 dV <- dV + P^T dO
-        block_Pt_f32 = block_Pt.to(tl.float32)
-        block_dO_f32 = block_dO.to(tl.float32)
-        block_dV = (block_dV + tl.dot(block_Pt_f32, block_dO_f32)).to(tl.float32)
+        block_dV += tl.dot(block_Pt.to(tl.float16), block_dO)
         
         # dP = dO * V^T
         # dP^T = V * dO^T
-        block_V_f32 = block_V.to(tl.float32)
-        block_dPt = tl.dot(block_V_f32, tl.trans(block_dO_f32)).to(tl.float32)
+        block_dPt = tl.dot(block_V, tl.trans(block_dO)).to(tl.float32)
 
         # dS = P * (dP - D)  note: * is hadamard product here
         # => dS^T = P^T * (dP^T - D^T)
-        block_dSt = block_Pt_f32 * (block_dPt - block_D[None, :])
-        block_dSt = block_dSt.to(tl.float32)
+        block_dSt = block_Pt * (block_dPt - block_D[None, :])
+        block_dSt = block_dSt.to(tl.float16)
 
         # dK <= dK + dS^T * Q
-        block_Qt_f32 = block_Qt.to(tl.float32)
-        block_dK = (block_dK + tau * tl.dot(block_dSt, tl.trans(block_Qt_f32))).to(tl.float32)
+        block_dK += tau * tl.dot(block_dSt, tl.trans(block_Qt))
 
 
         curr_offset_Q_T += BLOCK_SIZE_Q
@@ -171,6 +178,17 @@ def _attn_backward_dK_dV(
 
 
 
+@triton.autotune(
+    configs=[
+        triton.Config({'BLOCK_SIZE_Q': 64, 'BLOCK_SIZE_KV': 32}, num_warps=4, num_stages=2),
+        triton.Config({'BLOCK_SIZE_Q': 64, 'BLOCK_SIZE_KV': 32}, num_warps=8, num_stages=2),
+        triton.Config({'BLOCK_SIZE_Q': 32, 'BLOCK_SIZE_KV': 32}, num_warps=4, num_stages=2),
+        triton.Config({'BLOCK_SIZE_Q': 64, 'BLOCK_SIZE_KV': 16}, num_warps=4, num_stages=2),
+        triton.Config({'BLOCK_SIZE_Q': 32, 'BLOCK_SIZE_KV': 16}, num_warps=4, num_stages=2),
+        triton.Config({'BLOCK_SIZE_Q': 128, 'BLOCK_SIZE_KV': 64}, num_warps=8, num_stages=2),
+    ],
+    key=['SEQ_LEN', 'HEAD_DIM'],
+)
 @triton.jit
 def _attn_backward_dQ(
     Q,
@@ -255,15 +273,12 @@ def _attn_backward_dQ(
             block_P = tl.where(mask, block_P, 0.0)
 
         # dP and dS.
-        block_dO_f32 = block_dO.to(tl.float32)
-        block_Vt_f32 = block_Vt.to(tl.float32)
-        block_dP = tl.dot(block_dO_f32, block_Vt_f32).to(tl.float32)
-        block_P_f32 = block_P.to(tl.float32)
-        block_dS = (block_P_f32 * (block_dP - Di[:, None])).to(tl.float32)
+        block_dP = tl.dot(block_dO, block_Vt).to(tl.float32)
+        block_dS = block_P * (block_dP - Di[:, None])
+        block_dS = block_dS.to(tl.float16)
         
         # note: We need to de-scale dq in the end, because kT was pre-scaled.
-        block_Kt_f32 = block_Kt.to(tl.float32)
-        block_dQ = (block_dQ + tau * tl.dot(block_dS, tl.trans(block_Kt_f32))).to(tl.float32)
+        block_dQ += tau * tl.dot(block_dS, tl.trans(block_Kt))
         
         curr_offset_KV_T += BLOCK_SIZE_KV
         block_Kt_ptr += BLOCK_SIZE_KV * stride_seq
@@ -361,20 +376,16 @@ def _attn_forward_internal(
 
         # correction factor
         alpha = tl.math.exp(m_i - m_ij)
+
+        block_P = block_P.to(tl.float16)
    
         # l_i = l_i * exp(m_i - m_ij) + l_ij
-        # Cast to float32 to prevent dtype promotion to fp64
-        l_i = (l_i * alpha + l_ij).to(tl.float32)
+        l_i = l_i * alpha + l_ij
         # O = O_old * alpha + PV
-        # Keep block_O in float32 for accumulation
         block_O = block_O * alpha[:, None]
-        # Compute PV and add to block_O (don't use accumulator parameter)
-        block_P_f32 = block_P.to(tl.float32)
-        block_V_f32 = block_V.to(tl.float32)
-        block_PV = tl.dot(block_P_f32, block_V_f32)
-        block_O = (block_O + block_PV).to(tl.float32)
+        block_O = tl.dot(block_P, block_V, block_O)
 
-        m_i = m_ij.to(tl.float32)
+        m_i = m_ij
 
         block_K_ptr = tl.advance(block_K_ptr, (0, BLOCK_SIZE_KV))
         block_V_ptr = tl.advance(block_V_ptr, (BLOCK_SIZE_KV, 0))
@@ -384,6 +395,17 @@ def _attn_forward_internal(
 
 # stride of ith dimension: how much step i need to take to move from j to j+1 in ith dim
 # it is simply product of its inner dims
+@triton.autotune(
+    configs=[
+        triton.Config({'BLOCK_SIZE_Q': 128, 'BLOCK_SIZE_KV': 64}, num_warps=8, num_stages=2),
+        triton.Config({'BLOCK_SIZE_Q': 64, 'BLOCK_SIZE_KV': 64}, num_warps=4, num_stages=2),
+        triton.Config({'BLOCK_SIZE_Q': 64, 'BLOCK_SIZE_KV': 32}, num_warps=4, num_stages=2),
+        triton.Config({'BLOCK_SIZE_Q': 32, 'BLOCK_SIZE_KV': 32}, num_warps=4, num_stages=2),
+        triton.Config({'BLOCK_SIZE_Q': 128, 'BLOCK_SIZE_KV': 32}, num_warps=4, num_stages=3),
+        triton.Config({'BLOCK_SIZE_Q': 64, 'BLOCK_SIZE_KV': 64}, num_warps=8, num_stages=3),
+    ],
+    key=['SEQ_LEN', 'HEAD_DIM'],
+)
 @triton.jit
 def _attn_forward_kernel(
     Q, # [B, H, T, D]    
@@ -536,7 +558,7 @@ def _attn_forward_kernel(
 
 # torch treats autograd functions just like derivable funcs, 
 # passes dO and expects dQ, dK, dV
-class FlashAttentionKernel(torch.autograd.Function):
+class FlashAttention(torch.autograd.Function):
     # conventions: 
     # D -> head dimension
     # H -> number of heads 
@@ -554,11 +576,8 @@ class FlashAttentionKernel(torch.autograd.Function):
         
         stage = 3 if causal else 1
 
-        # Fixed block sizes (removed autotune overhead)
-        BLOCK_SIZE_Q = 64
-        BLOCK_SIZE_KV = 32
-
-        grid = (triton.cdiv(SEQ_LEN, BLOCK_SIZE_Q), BATCH_SIZE * NUM_HEADS)
+        # Autotune will select optimal block sizes
+        grid = lambda META: (triton.cdiv(SEQ_LEN, META['BLOCK_SIZE_Q']), BATCH_SIZE * NUM_HEADS)
         
         # M is logSumExp: TODO: exact formula for logSumExp
         M  = torch.empty((BATCH_SIZE, NUM_HEADS, SEQ_LEN), device=Q.device, dtype=torch.float32)
@@ -591,11 +610,7 @@ class FlashAttentionKernel(torch.autograd.Function):
             NUM_HEADS       = Q.shape[1],
             SEQ_LEN         = Q.shape[2],
             HEAD_DIM        = HEAD_DIM_K,
-            BLOCK_SIZE_Q    = BLOCK_SIZE_Q,
-            BLOCK_SIZE_KV   = BLOCK_SIZE_KV,
             STAGE           = stage,
-            num_warps       = 4,
-            num_stages      = 2,
         )
 
         ctx.save_for_backward(Q, K, V, O, M)
@@ -618,8 +633,8 @@ class FlashAttentionKernel(torch.autograd.Function):
 
         BATCH_SIZE, NUM_HEADS, SEQ_LEN, HEAD_DIM = Q.shape
 
-        NUM_WARPS, NUM_STAGES = 4, 2
-        BLOCK_SIZE_MICRO, BLOCK_SIZE_MACRO = 32, 64
+        # Fixed block size for preprocessing (not performance critical)
+        BLOCK_SIZE_MACRO = 64
 
         # calculating D (per row) which will be used to calculate dS & then dQ, dV
         # D = rowsum(dO · O) note: its hadamard product
@@ -635,10 +650,12 @@ class FlashAttentionKernel(torch.autograd.Function):
             HEAD_DIM        = HEAD_DIM
         )
 
-        grid = (SEQ_LEN // BLOCK_SIZE_MACRO, 1, BATCH_SIZE * NUM_HEADS)
-        stage = 3 if ctx.causal else 1 
+        stage = 3 if ctx.causal else 1
 
-        _attn_backward_dK_dV[grid]( # type: ignore
+        # Grid for dK_dV: loops over KV blocks (index_KV_block in kernel)
+        # The kernel processes one KV block at a time, looping over all Q blocks internally
+        grid_dK_dV = lambda META: (triton.cdiv(SEQ_LEN, META['BLOCK_SIZE_KV']), 1, BATCH_SIZE * NUM_HEADS)
+        _attn_backward_dK_dV[grid_dK_dV]( # type: ignore
             Q               = Q,
             K               = K,
             V               = V,
@@ -655,16 +672,14 @@ class FlashAttentionKernel(torch.autograd.Function):
             stride_dim      = Q.stride(3),
             NUM_HEADS       = NUM_HEADS,
             SEQ_LEN         = SEQ_LEN,
-            BLOCK_SIZE_Q    = BLOCK_SIZE_MICRO,
-            BLOCK_SIZE_KV   = BLOCK_SIZE_MACRO,
             HEAD_DIM        = ctx.HEAD_DIM,
             STAGE           = stage,
-            num_warps       = NUM_WARPS,
-            num_stages      = NUM_STAGES,
         )
     
-
-        _attn_backward_dQ[grid]( # type: ignore
+        # Grid for dQ: loops over Q blocks (index_KV_block in kernel, but used for Q)
+        # The kernel processes one Q block at a time, looping over all KV blocks internally
+        grid_dQ = lambda META: (triton.cdiv(SEQ_LEN, META['BLOCK_SIZE_Q']), 1, BATCH_SIZE * NUM_HEADS)
+        _attn_backward_dQ[grid_dQ]( # type: ignore
             Q               = Q,
             K               = K,
             V               = V,
@@ -681,12 +696,8 @@ class FlashAttentionKernel(torch.autograd.Function):
             stride_dim      = Q.stride(3),
             NUM_HEADS       = NUM_HEADS,
             SEQ_LEN         = SEQ_LEN,
-            BLOCK_SIZE_Q    = BLOCK_SIZE_MACRO,
-            BLOCK_SIZE_KV   = BLOCK_SIZE_MICRO,
             HEAD_DIM        = ctx.HEAD_DIM,
             STAGE           = stage,
-            num_warps       = NUM_WARPS,
-            num_stages      = NUM_STAGES,
         )
 
         return dQ, dK, dV, None, None
@@ -732,7 +743,7 @@ def test_op(BATCH_SIZE, NUM_HEADS, SEQ_LEN, HEAD_DIM, causal, dtype=torch.float1
     ref_dQ, Q.grad = Q.grad.clone(), None # type: ignore
 
     # triton implementation
-    tri_out = FlashAttentionKernel.apply(Q, K, V, causal, softmax_scale).half()
+    tri_out = FlashAttention.apply(Q, K, V, causal, softmax_scale).half()
     tri_out.backward(dO)
     tri_dV, V.grad = V.grad.clone(), None # type: ignore
     tri_dK, K.grad = K.grad.clone(), None # type: ignore
@@ -747,7 +758,7 @@ def test_op(BATCH_SIZE, NUM_HEADS, SEQ_LEN, HEAD_DIM, causal, dtype=torch.float1
     assert torch.allclose(ref_dQ, tri_dQ, atol=atol, rtol=rtol)
     
     # Benchmark
-    ms = triton.testing.do_bench(lambda: FlashAttentionKernel.apply(Q, K, V, causal, softmax_scale).half().backward(dO))
+    ms = triton.testing.do_bench(lambda: FlashAttention.apply(Q, K, V, causal, softmax_scale).half().backward(dO))
     
     # FLOPs for attention: 2 * B * H * T^2 * D (QK^T) + 2 * B * H * T^2 * D (softmax*V) = 4*B*H*T^2*D per pass
     # Forward + Backward ≈ 2.5x forward FLOPs (backward computes dQ, dK, dV)
@@ -756,6 +767,6 @@ def test_op(BATCH_SIZE, NUM_HEADS, SEQ_LEN, HEAD_DIM, causal, dtype=torch.float1
     print(f"Time: {ms:.3f}ms, TFLOPS: {tflops:.2f}")
 
 if __name__ == "__main__":
-    # test_op(BATCH_SIZE=1, NUM_HEADS=2, SEQ_LEN=64, HEAD_DIM=64, causal=True)
-    test_op(BATCH_SIZE=8, NUM_HEADS=16, SEQ_LEN=4096, HEAD_DIM=64, causal=True)
+    test_op(BATCH_SIZE=1, NUM_HEADS=2, SEQ_LEN=64, HEAD_DIM=64, causal=True)
+    test_op(BATCH_SIZE=2, NUM_HEADS=8, SEQ_LEN=1024, HEAD_DIM=64, causal=True)
     print("PASSED")

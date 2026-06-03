@@ -20,6 +20,7 @@ class Device:
         self.scaler = GradScaler(enabled=self.use_amp and self.amp_dtype == torch.float16)
 
         self._setup(config)
+        logger.warning(f"training with autocast: {self.use_amp} with {self.amp_dtype}")
 
     def _detect(self):
         if torch.cuda.is_available():
