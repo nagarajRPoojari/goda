@@ -1,16 +1,18 @@
-import os
 import json
-from typing import Dict, Any
+import os
+from typing import Any, Dict
+
 from mint.data.datasets.base import SFTTrainDataset
+
 
 class CustomJSON(SFTTrainDataset):
     def __init__(self, filepath: str) -> None:
         super().__init__()
         self.filepath = filepath
         self.conversations = []
-        
+
         if os.path.exists(filepath):
-            with open(filepath, 'r', encoding='utf-8') as f:
+            with open(filepath, "r", encoding="utf-8") as f:
                 for line in f:
                     line = line.strip()
                     if line:
