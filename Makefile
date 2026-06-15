@@ -30,7 +30,6 @@ merge:
 	@pr_url=$$(gh pr create --title "[$(TYPE)] $(MSG)" --body "Automated PR via Makefile" --base main --head $(BRANCH_NAME)); \
 	echo "PR Created: $$pr_url"; \
 	echo "Merging PR into main..."; \
-	gh pr merge $$pr_url --merge --delete-branch
 
 	@# 5. Clean up local state
 	@echo "Switching back to main and pulling updates..."
