@@ -1,8 +1,11 @@
 import re
-from typing import Dict, Any, Literal
+from typing import Any, Dict, Literal
+
 from datasets import load_dataset
-from mint.data.datasets.base import SFTTrainDataset, SFTEvalDataset
+
+from mint.data.datasets.base import SFTEvalDataset, SFTTrainDataset
 from mint.utils.exec import execute_code
+
 
 class HumanEval(SFTTrainDataset, SFTEvalDataset):
     def __init__(self) -> None:
@@ -19,36 +22,35 @@ class HumanEval(SFTTrainDataset, SFTEvalDataset):
     def __getitem__(self, index: int) -> Dict[str, Any]:
         row = self.ds[index]
         solution = f"{row['prompt']}\n{row['canonical_solution']}"
-        
+
         return {
             "messages": [
-                {"role": "user", "content": row['prompt']},
-                {"role": "assistant", "content": solution}
+                {"role": "user", "content": row["prompt"]},
+                {"role": "assistant", "content": solution},
             ],
-            "entry_point": row['entry_point'],
-            "test": row['test']
+            "entry_point": row["entry_point"],
+            "test": row["test"],
         }
 
     def evaluate(self, conversation: Dict[str, Any], completion: str) -> bool:
-        imports = self._extract_imports(conversation['messages'][0]['content'])
+        imports = self._extract_imports(conversation["messages"][0]["content"])
         code = self._extract_code(completion)
-        
+
         program = f"{imports}\n\n{code}\n\n{conversation['test']}\ncheck({conversation['entry_point']})"
         result = execute_code(program)
         return result.success
-    
+
     def _extract_imports(self, prompt: str) -> str:
         imports = []
-        for line in prompt.split('\n'):
+        for line in prompt.split("\n"):
             stripped = line.strip()
-            if stripped.startswith(('import ', 'from ')):
+            if stripped.startswith(("import ", "from ")):
                 imports.append(stripped)
-            elif stripped and not stripped.startswith('#'):
+            elif stripped and not stripped.startswith("#"):
                 break
-        return '\n'.join(imports)
-    
+        return "\n".join(imports)
+
     def _extract_code(self, completion: str) -> str:
-        pattern = r'```(?:python)?\s*\n(.*?)\n```'
+        pattern = r"```(?:python)?\s*\n(.*?)\n```"
         matches = re.findall(pattern, completion, re.DOTALL)
         return matches[0].strip() if matches else completion.strip()
-

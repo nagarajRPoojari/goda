@@ -1,11 +1,18 @@
-from typing import Literal, Dict, Any
+from typing import Any, Dict, Literal
+
 from datasets import load_dataset
-from mint.data.datasets.base import SFTTrainDataset, SFTEvalDataset, build_mc_prompt
+
+from mint.data.datasets.base import SFTEvalDataset, SFTTrainDataset, build_mc_prompt
+
 
 class MMLU(SFTTrainDataset, SFTEvalDataset):
-    LETTERS = ('A', 'B', 'C', 'D')
+    LETTERS = ("A", "B", "C", "D")
 
-    def __init__(self, subset: Literal["all"] = "all", split: Literal["auxiliary_train", "validation", "dev", "test"] = "test") -> None:
+    def __init__(
+        self,
+        subset: Literal["all"] = "all",
+        split: Literal["auxiliary_train", "validation", "dev", "test"] = "test",
+    ) -> None:
         super().__init__()
         self.ds = load_dataset("cais/mmlu", subset, split=split).shuffle(seed=42)
 
@@ -19,15 +26,15 @@ class MMLU(SFTTrainDataset, SFTEvalDataset):
     def __getitem__(self, index: int) -> Dict[str, Any]:
         row = self.ds[index]
         user_msg = build_mc_prompt(row["question"], self.LETTERS, row["choices"])
-        
+
         return {
             "messages": [
                 {"role": "user", "content": user_msg},
-                {"role": "assistant", "content": self.LETTERS[row["answer"]]}
+                {"role": "assistant", "content": self.LETTERS[row["answer"]]},
             ],
             "subject": row["subject"],
-            "letters": self.LETTERS
+            "letters": self.LETTERS,
         }
 
     def evaluate(self, conversation: Dict[str, Any], completion: str) -> bool:
-        return completion == conversation['messages'][-1]['content']
+        return completion == conversation["messages"][-1]["content"]
