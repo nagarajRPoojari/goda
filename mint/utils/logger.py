@@ -1,7 +1,11 @@
-from loguru import logger
 import sys
+from dataclasses import dataclass
 
-logger.remove() 
+from loguru import logger
+
+from mint.config.base import Config
+
+logger.remove()
 
 logger.add(
     sys.stderr,
@@ -9,3 +13,11 @@ logger.add(
     level="INFO",
     colorize=True,
 )
+
+
+@dataclass
+class LoggerConfig(Config):
+    wandb_enabled: bool = True
+    wandb_project: str = "goda"
+    wandb_run_name: str | None = None
+    wandb_entity: str | None = None

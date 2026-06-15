@@ -10,14 +10,14 @@ from pathlib import Path
 
 
 from mint.eval.base import Evaluator, Task
-from goda.config import Config
+from mint.eval.base import EvalConfig
 from mint.tokenizer import Tokenizer
 from mint.utils.device import Device
 
 
 class CoreEvaluator(Evaluator):
 
-    def __init__(self, model: nn.Module, config: Config, tokenizer: Tokenizer, device: Device, bundle_dir: str = "data/eval_bundle", config_path: str = "data/eval_bundle/core.yaml", seed: int = 42):
+    def __init__(self, model: nn.Module, config: EvalConfig, tokenizer: Tokenizer, device: Device, bundle_dir: str = "data/eval_bundle", config_path: str = "data/eval_bundle/core.yaml", seed: int = 42):
         super().__init__(model, config, device)
         self.tokenizer = tokenizer
         self.bundle_dir = Path(bundle_dir)

@@ -1,14 +1,12 @@
 from abc import ABC, abstractmethod
+from enum import Enum
 from typing import Any
 
-
 import torch.nn as nn
-from enum import Enum
-from pathlib import Path
 
+from mint.config.base import Config
 from mint.utils.device import Device
-from goda.config import Config
-from mint.utils.logger import logger
+
 
 class Task(Enum):
     MC = "multiple_choice"
@@ -16,15 +14,17 @@ class Task(Enum):
     LM = "language_modeling"
 
 
+class EvalConfig(Config):
+    seq_length: int = 512
+
+
 class Evaluator(ABC):
-    
-    def __init__(self, model: nn.Module, config: Config, device: Device):
+    def __init__(self, model: nn.Module, config: EvalConfig, device: Device):
         self.model = model
         self.config = config
         self.device = device
         self.process_info = device.process_info()
-    
+
     @abstractmethod
     def evaluate(self, *args, **kwargs) -> dict[str, Any]:
         pass
-

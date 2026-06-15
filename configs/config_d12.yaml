@@ -3,8 +3,8 @@ hidden_dim: 128
 seq_length: 512
 vocab_size: 50267
 n_layers: 2
-n_heads: 4
-n_kv_heads: 4
+n_heads: 12
+n_kv_heads: 6
 head_dim: 128
 rope_base_theta: 100000
 tie_weights: true
@@ -12,12 +12,12 @@ mixed_precision: true
 use_meta_device: true
 compile_model: true
 data_dir: data/climbmix
-batch_size: 2
+batch_size: 64
 buffer_size: 1000
 tokenizer_batch_size: 128
-train_num_steps: 10
+train_num_steps: 1080
 grad_clip: 1.0
-log_every_n_steps: 1
+log_every_n_steps: 10
 eval_every_n_steps: 100
 eval_num_steps: 10
 core_eval_every_n_step: 500

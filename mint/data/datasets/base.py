@@ -1,18 +1,17 @@
-from abc import ABC, abstractmethod
-from typing import Dict, Any, Literal
+from abc import abstractmethod
+from typing import Any, Dict, Literal
+
 
 class SFTDataset:
     def __init__(self) -> None:
         super().__init__()
         self.index = 0
-    
+
     @abstractmethod
-    def __len__(self) -> int:
-        ...
-    
+    def __len__(self) -> int: ...
+
     @abstractmethod
-    def __getitem__(self, index: int) -> Dict[str, Any]:
-        ...
+    def __getitem__(self, index: int) -> Dict[str, Any]: ...
 
 
 class SFTTrainDataset(SFTDataset):
@@ -20,7 +19,7 @@ class SFTTrainDataset(SFTDataset):
         example = self[self.index]
         self.index = (self.index + 1) % len(self)
         return example
-    
+
     def reset(self) -> None:
         self.index = 0
 
@@ -28,20 +27,19 @@ class SFTTrainDataset(SFTDataset):
 class SFTEvalDataset(SFTDataset):
     def __init__(self) -> None:
         super().__init__()
-    
+
     @property
     @abstractmethod
-    def eval_type(self) -> Literal["categorical", "generative"]:
-        ...
-    
+    def eval_type(self) -> Literal["categorical", "generative"]: ...
+
     @abstractmethod
-    def evaluate(self, conversation: Dict[str, Any], completion: str) -> bool:
-        ...
+    def evaluate(self, conversation: Dict[str, Any], completion: str) -> bool: ...
 
 
-def build_mc_prompt(question: str, letters: tuple, choices: list) -> str:
+def build_mc_prompt(question: str, letters: tuple[str], choices: list[str]) -> str:
     query = f"Multiple Choice question: {question}\n"
-    query += "".join([f"- {choice}={letter}\n" for letter, choice in zip(letters, choices)])
+    query += "".join(
+        [f"- {choice}={letter}\n" for letter, choice in zip(letters, choices)]
+    )
     query += "\nRespond only with the letter of the correct answer."
     return query
-

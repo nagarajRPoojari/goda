@@ -2,15 +2,14 @@ from typing import Generator, Tuple
 
 import torch
 
-from mint.data.dataloader import DistributedDataloader
+from mint.data.dataloader import DataloaderConfig, DistributedDataloader
 from mint.tokenizer import Tokenizer
 from mint.data.datasets.base import SFTDataset
 from mint.utils.device import Device
 from mint.utils.logger import logger
-from goda.config import Config
 
 class DistributedSFTDataloader(DistributedDataloader):
-    def __init__(self, device: Device, config: Config, tokenizer: Tokenizer, datasets: list[SFTDataset], shuffle: bool = True) -> None:
+    def __init__(self, device: Device, config: DataloaderConfig, tokenizer: Tokenizer, datasets: list[SFTDataset], shuffle: bool = True) -> None:
         super().__init__(
             device=device,
             data_dir="",

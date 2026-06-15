@@ -6,14 +6,14 @@ import torch.distributed as dist
 from typing import Any
 
 from mint.eval.base import Evaluator
-from goda.config import Config
+from mint.eval.base import EvalConfig
 from mint.tokenizer import Tokenizer
 from mint.utils.device import Device
 from mint.data.datasets.base import SFTEvalDataset
 
 
 class ChatCoreEvaluator(Evaluator):
-    def __init__(self, model: nn.Module, config: Config, tokenizer: Tokenizer, device: Device, datasets: list[SFTEvalDataset]):
+    def __init__(self, model: nn.Module, config: EvalConfig, tokenizer: Tokenizer, device: Device, datasets: list[SFTEvalDataset]):
         super().__init__(model, config, device)
         self.tokenizer = tokenizer
         self.datasets = datasets
