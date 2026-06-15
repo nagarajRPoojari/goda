@@ -2,7 +2,7 @@ wandb
 checkpoints
 .venv
 
-data
+data/*
 
 __pycache__
 
