@@ -9,6 +9,7 @@ from goda.tokenizer import Tokenizer
 from goda.gemma import Gemma, configure_optimizer
 from goda.logger import logger
 from goda.pretrain import PreTrainer
+from goda.adapter import LoRA
 
 
 def main():
@@ -66,6 +67,9 @@ def main():
         config=config,
         tokenizer=tokenizer
     )
+
+    # LoRA().apply(model=model, target_modules=[], r=8, alpha=16)
+
     trainer.train()
 
 
