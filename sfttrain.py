@@ -1,21 +1,22 @@
 import torch
 import torch.nn as nn
 import argparse
-from goda.dataloader import DistributedSFTDataloader
-from goda.device import Device
-from goda.config import Config
-from goda.tokenizer import Tokenizer
-from goda.gemma import Gemma, configure_optimizer
+
 from goda.logger import logger
 from goda.sfttrain import SFTTrainer
-from goda.sft.base import SFTEvalDataset
-from goda.sft.arc import ARC
-from goda.sft.mmlu import MMLU
-from goda.sft.gsm8k import GSM8K
-from goda.sft.humaneval import HumanEval
-from goda.sft.smoltalk import SmolTalk
-from goda.sft.spellingbee import SpellingBee, SimpleSpelling
-from goda.sft.customjsonl import CustomJSON
+from mint.config.base import Config
+from mint.data.datasets.arc import ARC
+from mint.data.datasets.base import SFTEvalDataset
+from mint.data.datasets.customjsonl import CustomJSON
+from mint.data.datasets.gsm8k import GSM8K
+from mint.data.datasets.humaneval import HumanEval
+from mint.data.datasets.mmlu import MMLU
+from mint.data.datasets.smoltalk import SmolTalk
+from mint.data.datasets.spellingbee import SimpleSpelling, SpellingBee
+from mint.data.dist.sft import DistributedSFTDataloader
+from mint.nn.models import Gemma, configure_optimizer
+from mint.tokenizer import Tokenizer
+from mint.utils.device import Device
 
 
 def parse_dataset_spec(spec: str, dataset_map: dict):

@@ -4,14 +4,13 @@ import time
 import pyarrow.parquet as pq
 from typing import Generator, Iterator, List, Tuple
 
-from mint.data.dataloader import DistributedDataloader
+from mint.data.dataloader import DataloaderConfig, DistributedDataloader
 from mint.tokenizer import Tokenizer
 from mint.utils.device import Device
 from mint.utils.logger import logger
-from goda.config import Config
 
 class DistributedPretrainDataloader(DistributedDataloader):
-    def __init__(self, device: Device, config: Config, tokenizer: Tokenizer,
+    def __init__(self, device: Device, config: DataloaderConfig, tokenizer: Tokenizer,
                  min_shards_required: int = 2, max_shards_to_wait: int = -1,
                  shard_check_interval: float = 5.0) -> None:
         

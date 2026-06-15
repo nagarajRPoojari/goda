@@ -1,75 +1,111 @@
-import torch
-import torch.nn as nn
 import argparse
-from torch.optim import Optimizer
-from goda.dataloader import DistributedDataloader, DistributedPretrainDataloader
-from goda.device import Device
-from goda.config import DEFAULT_CONFIG, Config
-from goda.tokenizer import Tokenizer
-from goda.gemma import Gemma, configure_optimizer
-from goda.logger import logger
-from goda.pretrain import PreTrainer
-from goda.adapter import LoRA
+from dataclasses import dataclass
+
+import torch
+from torch import nn
+
+from mint.config.base import Config
+from mint.data.dataloader import DataloaderConfig, DistributedDataloader
+from mint.data.dist.pretrain import DistributedPretrainDataloader
+from mint.nn.models import Gemma, GemmaConfig, configure_optimizer
+from mint.optim.muon_adamw import MuonAdamWConfig
+from mint.tokenizer import Tokenizer
+from mint.trainer.pretrain import PretrainConfig, PreTrainer
+from mint.utils.device import Device, DeviceConfig
+from mint.utils.logger import logger
+
+
+@dataclass
+class MetaConfig(Config):
+    train: PretrainConfig
+    model: GemmaConfig
+    optim: MuonAdamWConfig
+    device: DeviceConfig
+    dl: DataloaderConfig
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Train Gemma model with distributed dataloader")
-    parser.add_argument("--config", type=str, default="config_d12.yaml", help="Path to config YAML file")
-    parser.add_argument("--min-shards", type=int, default=2, help="Minimum shards required before starting training")
-    parser.add_argument("--max-shards-to-wait", type=int, default=-1, help="Maximum shards to wait for (-1 = wait indefinitely)")
+    parser = argparse.ArgumentParser(
+        description="Train Gemma model with distributed dataloader"
+    )
+    parser.add_argument(
+        "--config", type=str, default="config_d12.yaml", help="Path to config YAML file"
+    )
+    parser.add_argument(
+        "--min-shards",
+        type=int,
+        default=2,
+        help="Minimum shards required before starting training",
+    )
+    parser.add_argument(
+        "--max-shards-to-wait",
+        type=int,
+        default=-1,
+        help="Maximum shards to wait for (-1 = wait indefinitely)",
+    )
     args = parser.parse_args()
-    
+
     tokenizer = Tokenizer()
-    config = Config.from_yaml(yaml_path=args.config)
-    
-    # Validate vocab size matches tokenizer
-    if config.vocab_size != tokenizer.vocab_size:
-        logger.error(f"Config vocab_size ({config.vocab_size}) does not match tokenizer vocab_size ({tokenizer.vocab_size})")
-        logger.error(f"Please update the config file to set vocab_size: {tokenizer.vocab_size}")
-        raise ValueError(f"Vocab size mismatch: config={config.vocab_size}, tokenizer={tokenizer.vocab_size}")
-    
+    config: MetaConfig = MetaConfig.from_toml(toml_path=args.config)
+
+    if config.model.vocab_size != tokenizer.vocab_size:
+        logger.error(
+            f"Config vocab_size ({config.model.vocab_size}) does not match tokenizer vocab_size ({tokenizer.vocab_size})"
+        )
+        logger.error(
+            f"Please update the config file to set vocab_size: {tokenizer.vocab_size}"
+        )
+        raise ValueError(
+            f"Vocab size mismatch: config={config.model.vocab_size}, tokenizer={tokenizer.vocab_size}"
+        )
+
     device = Device(config)
-    
+
     model: nn.Module
-    if config.use_meta_device:
+    if config.train.use_meta_device:
         logger.info("Initializing model on meta device...")
-        with torch.device('meta'):
-            model = Gemma(config)
+        with torch.device("meta"):
+            model = Gemma(
+                config.model, gradient_checkpointing=config.train.gradient_checkpointing
+            )
         logger.info(f"Model parameters: {model.get_num_params():,}")
         model = device.move_to_device(model, from_meta=True)
     else:
-        model = Gemma(config)
+        model = Gemma(config.model)
         logger.info(f"Model parameters: {model.get_num_params():,}")
         model = device.move_to_device(model, from_meta=False)
-    
-    if config.compile_model:
+
+    if config.train.compile_model:
         model = device.compile_model(model, enabled=True)  # type: ignore[assignment]
-    
-    optimizer = configure_optimizer(model, config)
-    
+
+    optimizer = configure_optimizer(
+        model,
+        model_cfg=config.model,
+        optim_cfg=config.optim,
+        sched_cfg=config.train.sched,
+    )
     dataloader: DistributedDataloader = DistributedPretrainDataloader(
         device=device,
-        config=config,
+        config=config.dl,
         tokenizer=tokenizer,
         min_shards_required=args.min_shards,
-        max_shards_to_wait=args.max_shards_to_wait
+        max_shards_to_wait=args.max_shards_to_wait,
     )
-    
+
     logger.info(f"Device: {device}")
     logger.info(f"Training on {device.type} with AMP={device.use_amp}")
     logger.info(f"Dataloader min_shards: {args.min_shards}")
-    
+
     trainer = PreTrainer(
         model=model,
         optimizer=optimizer,
         dataloader=dataloader,
         device=device,
-        config=config,
-        tokenizer=tokenizer
+        config=config.train,
+        tokenizer=tokenizer,
     )
 
     # LoRA().apply(model=model, target_modules=[], r=8, alpha=16)
-
     trainer.train()
 
 

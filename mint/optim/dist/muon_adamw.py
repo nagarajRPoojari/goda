@@ -1,8 +1,34 @@
+from dataclasses import dataclass
+
 import torch
 import torch.distributed as dist
 from torch import Tensor
 from torch.optim import Optimizer
 from typing import Callable
+
+
+from mint.config.base import Config
+
+@dataclass
+class AdamConfig(Config):
+    adamw_beta1: float = 0.8
+    adamw_beta2_lm_head: float = 0.96
+    adamw_beta2_embedding: float = 0.995
+    adamw_beta2_scalar: float = 0.95
+    adamw_eps: float = 1e-10
+
+
+@dataclass
+class MuonConfig(Config):
+    muon_momentum: float = 0.95
+    muon_beta2: float = 0.9
+    muon_ns_steps: int = 5
+
+
+@dataclass
+class MuonAdamWConfig(AdamConfig, MuonConfig):
+    pass
+
 
 POLAR_EXPRESS_COEFFS = [
     (8.156554524902461, -22.48329292557795, 15.878769915207462),
