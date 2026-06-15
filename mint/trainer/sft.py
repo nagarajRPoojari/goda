@@ -61,7 +61,7 @@ class SFTTrainer:
         self.wandb_run = self._init_wandb()
 
         self.checkpointer = Checkpointer(
-            config == config.ckpt,
+            config=config.ckpt,
             is_main_process=self.is_main_process,
         )
 
@@ -80,15 +80,15 @@ class SFTTrainer:
                 datasets=eval_datasets,
             )
 
-            if config.resume_from_checkpoint:
+            if config.ckpt.resume_from_checkpoint:
                 self._load_pretrained_checkpoint()
 
     def _load_pretrained_checkpoint(self):
         checkpoint_info = self.checkpointer.load_checkpoint(
             model=self.model,
             optimizer=self.optimizer,
-            checkpoint_path=self.config.resume_from_checkpoint,
-            load_best=self.config.load_best_checkpoint,
+            checkpoint_path=self.config.ckpt.resume_from_checkpoint,
+            load_best=self.config.ckpt.load_best_checkpoint,
         )
 
         logger.info(
@@ -116,7 +116,7 @@ class SFTTrainer:
         logger.info("Starting SFT training from step 0")
 
     def _init_wandb(self) -> Any | None:
-        if not self.config.wandb_enabled or not self.is_main_process:
+        if not self.config.lg.wandb_enabled or not self.is_main_process:
             return None
 
         if importlib.util.find_spec("wandb") is None:
@@ -127,16 +127,16 @@ class SFTTrainer:
         wandb = __import__("wandb")
 
         run = wandb.init(
-            project=self.config.wandb_project,
-            name=self.config.wandb_run_name,
-            entity=self.config.wandb_entity,
+            project=self.config.lg.wandb_project,
+            name=self.config.lg.wandb_run_name,
+            entity=self.config.lg.wandb_entity,
             config={
                 key: str(value) if isinstance(value, torch.dtype) else value
                 for key, value in self.config.__dict__.items()
             },
         )
         logger.info(
-            f"W&B initialized | project={self.config.wandb_project} | run={run.name}"
+            f"W&B initialized | project={self.config.lg.wandb_project} | run={run.name}"
         )
         return run
 
@@ -300,11 +300,12 @@ class SFTTrainer:
 
                 if (
                     self.is_main_process
-                    and self.config.save_checkpoint_every_n_steps is not None
+                    and self.config.ckpt.save_checkpoint_every_n_steps is not None
                 ):
                     if (
-                        step + 1
-                    ) % self.config.save_checkpoint_every_n_steps == 0 and step > 0:
+                        (step + 1) % self.config.ckpt.save_checkpoint_every_n_steps == 0
+                        and step > 0
+                    ):
                         self.checkpointer.save_checkpoint(
                             step=step,
                             model=self.model,
