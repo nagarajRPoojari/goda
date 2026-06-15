@@ -18,6 +18,8 @@ dependencies = [
     "aiofiles (>=25.1.0,<26.0.0)",
     "datasets (>=4.8.5,<5.0.0)",
     "openai (>=2.36.0,<3.0.0)",
+    "ryven>=3.5.0",
+    "pyside6>=6.11.1",
 ]
 
 
