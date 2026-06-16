@@ -8,6 +8,7 @@ import torch.nn.functional as F
 from mint.kvcache.base import KVCache
 
 
+# TODO: support custom bias
 class FlashAttention(nn.Module):
     def __init__(self, use_custom_fa: bool = True):
         super().__init__()
@@ -78,7 +79,12 @@ class FlashAttention(nn.Module):
         window_size: tuple[int, int],
     ) -> torch.Tensor:
         # Try custom flash attention first if enabled
-        if self.use_custom_fa and self._use_custom_fa(q) and window_size == (-1, -1):
+        if (
+            self.use_custom_fa
+            and self._use_custom_fa(q)
+            and window_size == (-1, -1)
+            and q.shape[1] == k.shape[1]  # doesnt support GQA yet
+        ):
             custom_fa = self._custom_fa
             assert custom_fa is not None
             # Calculate softmax scale (tau)
