@@ -53,7 +53,7 @@ class DistributedSFTDataloader(DistributedDataloader):
     def _partition_for_rank(self) -> list:
         return [idx for i, idx in enumerate(self.dataset_indices) if i % self.world_size == self.rank]
     
-    def batch_loader(self, split: str = "train", resume_state: dict | None = None) -> Generator[Tuple[torch.Tensor, torch.Tensor, torch.Tensor], None, None]:
+    def batch_loader(self, split: str = "train", resume_state: dict | None = None) -> Generator[Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]]:
         idx = 0
         total = len(self.rank_indices)
         
@@ -80,7 +80,8 @@ class DistributedSFTDataloader(DistributedDataloader):
             self.gpu_buffer.copy_(self.cpu_buffer, non_blocking=self.device.is_cuda)
             self.mask.copy_(self.cpu_mask, non_blocking=self.device.is_cuda)
             
-            yield self.inputs, self.targets, self.mask
+            # doc_ids irrelevent here
+            yield self.inputs, self.targets, self.mask, None
 
     def get_state(self) -> dict:
         return {}
