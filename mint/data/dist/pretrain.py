@@ -226,9 +226,9 @@ class DistributedBOSBestfitPretrainDataloader(DistributedDataloader):
                     else:
                         shortest_idx = min(range(len(doc_buffer)), key=lambda i: len(doc_buffer[i]))
                         doc = doc_buffer.pop(shortest_idx)
-                        self.row_doc_ids[row_idx, pos:pos + remaining] = torch.tensor(doc[:remaining], dtype=torch.long)
+                        self.row_buffer[row_idx, pos:pos + remaining] = torch.tensor(doc[:remaining], dtype=torch.long)
                         
-                        self.doc_ids[row_idx, pos:pos + doc_len] = global_doc_id
+                        self.row_doc_ids[row_idx, pos:pos + doc_len] = global_doc_id
                         global_doc_id += 1                        
                         
                         pos += remaining
