@@ -19,7 +19,7 @@ opener = urllib.request.build_opener(urllib.request.HTTPSHandler(context=ssl_con
 urllib.request.install_opener(opener)
 urllib.request.urlretrieve(url, filename)  # noqa: S310
 
-if Path.exists(filename):
+if Path(filename).exists():
     with zipfile.ZipFile(filename, "r") as zip_ref:
         zip_ref.extractall("data")
     shutil.move(filename, "dump/eval_bundle.zip")

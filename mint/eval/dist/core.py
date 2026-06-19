@@ -33,7 +33,7 @@ class CoreEvaluator(Evaluator):
         if self.pad_token_id is None:
             raise ValueError("tokenizer.pad_token is required")
 
-        with Path.open(self.config_path) as f:
+        with Path(self.config_path).open() as f:
             raw = yaml.safe_load(f)
 
         self.tasks = raw.get("icl_tasks", [])
@@ -142,7 +142,7 @@ class CoreEvaluator(Evaluator):
     def _load_dataset(self, dataset_uri: str):  # noqa: ANN202
         path = self.bundle_dir / "eval_data" / dataset_uri
         rows = []
-        with Path.open(path) as f:
+        with Path(path).open() as f:
             for line in f:
                 line_ = line.strip()
                 if line_:

@@ -109,7 +109,7 @@ class Checkpointer:
         }
 
         metadata_path = self.checkpoint_dir / "metadata.json"
-        with Path.open(metadata_path, "w") as f:
+        with Path(metadata_path).open("w") as f:
             json.dump(metadata, f, indent=2)
 
     def load_checkpoint(
@@ -160,6 +160,6 @@ class Checkpointer:
     def get_resume_info(self) -> dict[str, Any]:
         metadata_path = self.checkpoint_dir / "metadata.json"
         if metadata_path.exists():
-            with Path.open(metadata_path) as f:
+            with Path(metadata_path).open() as f:
                 return json.load(f)
         return {}
