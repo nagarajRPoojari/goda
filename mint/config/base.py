@@ -45,7 +45,7 @@ class Config:
         return cls(**init_kwargs)
 
     @classmethod
-    def _load_plain_dataclass(cls, target_cls: type, data: dict[str, Any]) -> Any:
+    def _load_plain_dataclass(cls, target_cls: type, data: dict[str, Any]) -> Any:  # noqa: ANN401
         """Helper to recursively parse vanilla dataclasses."""
         if not isinstance(data, dict):
             return data
@@ -80,7 +80,7 @@ class Config:
             raise FileNotFoundError(f"Config file not found: {toml_path}")
 
         # tomllib expects a binary file stream ('rb')
-        with open(path, "rb") as f:
+        with Path.open(path, "rb") as f:
             config_dict = tomllib.load(f)
 
         return cls.from_dict(config_dict)
