@@ -1,45 +1,25 @@
-import importlib.util
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 import torch
 from torch import nn
 from torch.optim import Optimizer
 
-from mint.config.base import Config
 from mint.data.dist.sft import DistributedSFTDataloader
-from mint.eval.base import EvalConfig
 from mint.eval.dist.chatcore import ChatCoreEvaluator
-from mint.trainer.scheduler import Scheduler, SchedulerConfig
-from mint.utils.checkpointer import Checkpointer, CheckpointerConfig
+from mint.trainer.base import BasetrainConfig, BaseTrainer
+from mint.trainer.scheduler import Scheduler
+from mint.utils.checkpointer import Checkpointer
 from mint.utils.device import Device
-from mint.utils.logger import LoggerConfig, logger
+from mint.utils.logger import logger
 
 
 @dataclass
-class SFTConfig(Config):
-    mixed_precision: bool = True
-    gradient_checkpointing: bool = False
-
-    use_meta_device: bool = True
-    compile_model: bool = True
-
-    train_num_steps: int = 1000
-    grad_clip: float = 1.0
-    log_every_n_steps: int = 10
-    eval_every_n_steps: int = 100
-    eval_num_steps: int = 10
-    core_eval_every_n_step: int = 500
-    gradient_accumulation_steps: int = 1
-
-    ckpt: CheckpointerConfig = field(default_factory=CheckpointerConfig)
-    sched: SchedulerConfig = field(default_factory=SchedulerConfig)
-    lg: LoggerConfig = field(default_factory=LoggerConfig)
-    eval: EvalConfig = field(default_factory=EvalConfig)
+class SFTConfig(BasetrainConfig): ...
 
 
-class SFTTrainer:
+class SFTTrainer(BaseTrainer):
     def __init__(
         self,
         model: nn.Module,
@@ -50,15 +30,14 @@ class SFTTrainer:
         tokenizer: Any = None,  # noqa: ANN401
         eval_datasets: list | None = None,
     ) -> None:
-        self.model = model
-        self.optimizer = optimizer
-        self.dataloader = dataloader
-        self.device = device
-        self.config = config
-        self.tokenizer = tokenizer
-        self.process_info = self.device.process_info()
-        self.is_main_process = self.process_info["is_main"]
-        self.wandb_run = self._init_wandb()
+        super().__init__(
+            model=model,
+            optimizer=optimizer,
+            dataloader=dataloader,
+            device=device,
+            config=config,
+            tokenizer=tokenizer,
+        )
 
         self.checkpointer = Checkpointer(
             config=config.ckpt,
@@ -110,31 +89,6 @@ class SFTTrainer:
             logger.error(f"Inf detected in model parameters after loading checkpoint: {inf_params}")
 
         logger.info("Starting SFT training from step 0")
-
-    def _init_wandb(self) -> Any | None:  # noqa: ANN401
-        if not self.config.lg.wandb_enabled or not self.is_main_process:
-            return None
-
-        if importlib.util.find_spec("wandb") is None:
-            raise ImportError("wandb is enabled in config but the package is not installed.")
-
-        wandb = __import__("wandb")
-
-        run = wandb.init(
-            project=self.config.lg.wandb_project,
-            name=self.config.lg.wandb_run_name,
-            entity=self.config.lg.wandb_entity,
-            config={
-                key: str(value) if isinstance(value, torch.dtype) else value
-                for key, value in self.config.__dict__.items()
-            },
-        )
-        logger.info(f"W&B initialized | project={self.config.lg.wandb_project} | run={run.name}")
-        return run
-
-    def _log_wandb(self, metrics: dict, step: int) -> None:
-        if self.wandb_run is not None:
-            self.wandb_run.log(metrics, step=step)
 
     def _run_evaluation(self, step: int, num_examples: int | None = None) -> None:
         if self.evaluator is None:
