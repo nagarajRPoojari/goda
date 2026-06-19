@@ -10,7 +10,7 @@ from pathlib import Path
 import aiofiles
 import aiohttp
 
-from goda.logger import logger
+from mint.utils.logger import logger
 
 try:
     from huggingface_hub import (

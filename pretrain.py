@@ -6,7 +6,7 @@ from torch import nn
 
 from mint.config.base import Config
 from mint.data.dataloader import DataloaderConfig, DistributedDataloader
-from mint.data.dist.pretrain import DistributedPretrainDataloader
+from mint.data.dist.pretrain import DistributedBOSBestfitPretrainDataloader
 from mint.nn.models import Gemma, GemmaConfig, configure_optimizer
 from mint.optim.muon_adamw import MuonAdamWConfig
 from mint.tokenizer import Tokenizer
@@ -84,7 +84,7 @@ def main():
         optim_cfg=config.optim,
         sched_cfg=config.train.sched,
     )
-    dataloader: DistributedDataloader = DistributedPretrainDataloader(
+    dataloader: DistributedDataloader = DistributedBOSBestfitPretrainDataloader(
         device=device,
         config=config.dl,
         tokenizer=tokenizer,
