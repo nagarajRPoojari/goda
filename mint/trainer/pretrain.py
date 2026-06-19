@@ -1,6 +1,5 @@
-import importlib.util
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 import torch
@@ -8,40 +7,22 @@ import torch.distributed as dist
 from torch import nn
 from torch.optim import Optimizer
 
-from mint.config.base import Config
 from mint.data.dataloader import DistributedDataloader
-from mint.eval.base import EvalConfig, Evaluator
+from mint.eval.base import Evaluator
 from mint.eval.bpb import BPBEvaluator
 from mint.eval.dist.core import CoreEvaluator
-from mint.trainer.scheduler import Scheduler, SchedulerConfig
-from mint.utils.checkpointer import Checkpointer, CheckpointerConfig
+from mint.trainer.base import BasetrainConfig, BaseTrainer
+from mint.trainer.scheduler import Scheduler
+from mint.utils.checkpointer import Checkpointer
 from mint.utils.device import Device
-from mint.utils.logger import LoggerConfig, logger
+from mint.utils.logger import logger
 
 
 @dataclass
-class PretrainConfig(Config):
-    mixed_precision: bool = True
-    gradient_checkpointing: bool = False
-
-    use_meta_device: bool = True
-    compile_model: bool = True
-
-    train_num_steps: int = 1000
-    grad_clip: float = 1.0
-    log_every_n_steps: int = 10
-    eval_every_n_steps: int = 100
-    eval_num_steps: int = 10
-    core_eval_every_n_step: int = 500
-    gradient_accumulation_steps: int = 1
-
-    ckpt: CheckpointerConfig = field(default_factory=CheckpointerConfig)
-    sched: SchedulerConfig = field(default_factory=SchedulerConfig)
-    lg: LoggerConfig = field(default_factory=LoggerConfig)
-    eval: EvalConfig = field(default_factory=EvalConfig)
+class PretrainConfig(BasetrainConfig): ...
 
 
-class PreTrainer:
+class PreTrainer(BaseTrainer):
     def __init__(
         self,
         model: nn.Module,
@@ -51,15 +32,14 @@ class PreTrainer:
         config: PretrainConfig,
         tokenizer: Any = None,  # noqa: ANN401
     ) -> None:
-        self.model = model
-        self.optimizer = optimizer
-        self.dataloader = dataloader
-        self.device = device
-        self.config = config
-        self.tokenizer = tokenizer
-        self.process_info = self.device.process_info()
-        self.is_main_process = self.process_info["is_main"]
-        self.wandb_run = self._init_wandb()
+        super().__init__(
+            model=model,
+            optimizer=optimizer,
+            dataloader=dataloader,
+            device=device,
+            config=config,
+            tokenizer=tokenizer,
+        )
 
         self.checkpointer = Checkpointer(
             config=config.ckpt,
@@ -87,30 +67,9 @@ class PreTrainer:
 
         self.start_step = 0
         if config.ckpt.resume_from_checkpoint:
-            self._resume_from_checkpoint()
+            self._load_pretrained_checkpoint()
 
-    def _init_wandb(self) -> Any | None:  # noqa: ANN401
-        if not self.config.lg.wandb_enabled or not self.is_main_process:
-            return None
-
-        if importlib.util.find_spec("wandb") is None:
-            raise ImportError("wandb is enabled in config but the package is not installed.")
-
-        wandb = __import__("wandb")
-
-        run = wandb.init(
-            project=self.config.lg.wandb_project,
-            name=self.config.lg.wandb_run_name,
-            entity=self.config.lg.wandb_entity,
-            config={
-                key: str(value) if isinstance(value, torch.dtype) else value
-                for key, value in self.config.__dict__.items()
-            },
-        )
-        logger.info(f"W&B initialized | project={self.config.lg.wandb_project} | run={run.name}")
-        return run
-
-    def _resume_from_checkpoint(self) -> None:
+    def _load_pretrained_checkpoint(self) -> None:
         checkpoint_info = self.checkpointer.load_checkpoint(
             model=self.model,
             optimizer=self.optimizer,
@@ -163,10 +122,6 @@ class PreTrainer:
 
         per_rank_state = checkpoint_dataloader_state.get("per_rank", {})
         return per_rank_state.get(self.process_info["rank"], {})
-
-    def _log_wandb(self, metrics: dict, step: int) -> None:
-        if self.wandb_run is not None:
-            self.wandb_run.log(metrics, step=step)
 
     def _run_evaluation(
         self,
