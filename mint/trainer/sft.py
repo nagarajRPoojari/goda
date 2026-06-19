@@ -191,21 +191,12 @@ class SFTTrainer(BaseTrainer):
                 )
 
                 if (step + 1) % self.config.eval_every_n_steps == 0 and step > 0:
-                    self._run_evaluation(step=step, num_examples=100)
-                    self._log_sample_predictions(step)
-
-                # Note: SFT uses (step + 1) for checkpoint frequency check
-                if (
-                    self.is_main_process
-                    and self.config.ckpt.save_checkpoint_every_n_steps is not None
-                    and (step + 1) % self.config.ckpt.save_checkpoint_every_n_steps == 0
-                    and step > 0
-                ):
-                    self._maybe_save_checkpoint(step, self.checkpointer)
-
-                # Note: SFT uses (step + 1) for logging frequency check
-                if (step + 1) % self.config.log_every_n_steps == 0:
-                    self._log_training_progress(step, metrics)
+                    self._run_evaluation(step=step+1, num_examples=100)
+                    self._log_sample_predictions(step+1)
+                
+                
+                self._maybe_save_checkpoint(step+1, self.checkpointer)
+                self._log_training_progress(step+1, metrics)
 
                 accumulated_loss = 0.0
 

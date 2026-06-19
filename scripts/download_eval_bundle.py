@@ -12,8 +12,8 @@ ssl_context.verify_mode = ssl.CERT_NONE
 url = "https://karpathy-public.s3.us-west-2.amazonaws.com/eval_bundle.zip"
 filename = "eval_bundle.zip"
 
-Path.makedirs("data", exist_ok=True)
-Path.makedirs("dump", exist_ok=True)
+Path("data").mkdir(exist_ok=True)
+Path("dump").mkdir(exist_ok=True)
 
 opener = urllib.request.build_opener(urllib.request.HTTPSHandler(context=ssl_context))
 urllib.request.install_opener(opener)
