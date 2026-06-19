@@ -24,10 +24,8 @@ class MetaConfig(Config):
     dl: DataloaderConfig
 
 
-def main():
-    parser = argparse.ArgumentParser(
-        description="Train Gemma model with distributed dataloader"
-    )
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Train Gemma model with distributed dataloader")
     parser.add_argument(
         "--config", type=str, default="config_d12.yaml", help="Path to config YAML file"
     )
@@ -52,9 +50,7 @@ def main():
         logger.error(
             f"Config vocab_size ({config.model.vocab_size}) does not match tokenizer vocab_size ({tokenizer.vocab_size})"
         )
-        logger.error(
-            f"Please update the config file to set vocab_size: {tokenizer.vocab_size}"
-        )
+        logger.error(f"Please update the config file to set vocab_size: {tokenizer.vocab_size}")  # noqa: S608
         raise ValueError(
             f"Vocab size mismatch: config={config.model.vocab_size}, tokenizer={tokenizer.vocab_size}"
         )
@@ -65,9 +61,7 @@ def main():
     if config.train.use_meta_device:
         logger.info("Initializing model on meta device...")
         with torch.device("meta"):
-            model = Gemma(
-                config.model, gradient_checkpointing=config.train.gradient_checkpointing
-            )
+            model = Gemma(config.model, gradient_checkpointing=config.train.gradient_checkpointing)
         logger.info(f"Model parameters: {model.get_num_params():,}")
         model = device.move_to_device(model, from_meta=True)
     else:
@@ -105,7 +99,7 @@ def main():
         tokenizer=tokenizer,
     )
 
-    # LoRA().apply(model=model, target_modules=[], r=8, alpha=16)
+    # LoRA().apply(model=model, target_modules=[], r=8, alpha=16)  # noqa: ERA001
     trainer.train()
 
 
