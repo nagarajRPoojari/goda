@@ -2,11 +2,11 @@ from typing import Optional
 
 import torch
 import torch.nn as nn
-
 from mint.kvcache.base import KVCache
 from mint.nn.attn import GroupedQueryAttention
 from mint.nn.ffn import GLU
 from mint.nn.norm import RMSNorm
+from mint.nn.pos import RoPE
 
 
 class GQAGluBlock(nn.Module):
@@ -31,15 +31,16 @@ class GQAGluBlock(nn.Module):
         self.pre_ffn_norm = RMSNorm(embed_dim)
         self.post_ffn_norm = RMSNorm(embed_dim)
 
+        pos_embeddings = RoPE(seq_len=seq_len, head_dim=head_dim, dtype=dtype)
+
         window_size = seq_len // 4 if attention_type == "S" else -1
         self.gqa = GroupedQueryAttention(
             n_heads=n_heads,
             n_kv_heads=n_kv_heads,
             head_dim=head_dim,
             embed_dim=embed_dim,
-            seq_len=seq_len,
-            rope_base_theta=rope_base_theta,
             dtype=dtype,
+            pos_embeddings=pos_embeddings,
             window_size=window_size,
         )
         self.ffn = GLU(embed_dim=embed_dim, hidden_dim=hidden_dim, dtype=dtype)
