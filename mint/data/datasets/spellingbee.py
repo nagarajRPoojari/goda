@@ -134,7 +134,7 @@ class SimpleSpelling(SFTTrainDataset):
     def _load_words(self) -> list:
 
         cache_path = "/tmp/words_alpha.txt"  # noqa: S108
-        if not Path.exists(cache_path):
+        if not Path(cache_path).exists():
             urllib.request.urlretrieve(WORD_LIST_URL, cache_path)  # noqa: S310
 
         with Path(cache_path).open() as f:
