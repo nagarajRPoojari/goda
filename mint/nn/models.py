@@ -73,16 +73,33 @@ class Gemma(nn.Module):
         input_ids: torch.Tensor,
         kv_caches: Optional[list[KVCache]] = None,
         start_pos: int = 0,
+        doc_ids: torch.Tensor = None,
+        attn_mask: torch.Tensor = None,
     ) -> torch.Tensor:
+
         h = self.tok_embeddings(input_ids)
 
         for i, block in enumerate(self.blocks):
-            kv_cache = kv_caches[i] if kv_caches is not None else None
+            kv_cache: KVCache = kv_caches[i] if kv_caches is not None else None
             if self.gradient_checkpointing and self.training and kv_cache is None:
                 # Use gradient checkpointing during training (not during generation with kv_cache)
-                h = checkpoint(block, h, kv_cache, start_pos, use_reentrant=False)
+                h = checkpoint(
+                    block,
+                    x=h,
+                    kv_cache=kv_cache,
+                    start_pos=start_pos,
+                    base_attn_mask=attn_mask,
+                    doc_ids=doc_ids,
+                    use_reentrant=False,
+                )
             else:
-                h = block(h, kv_cache=kv_cache, start_pos=start_pos)
+                h = block(
+                    x=h,
+                    kv_cache=kv_cache,
+                    start_pos=start_pos,
+                    base_attn_mask=attn_mask,
+                    doc_ids=doc_ids,
+                )
 
         h = self.norm(h)
         logits = self.output(h)

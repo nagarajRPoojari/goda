@@ -46,7 +46,18 @@ class GroupedQueryAttention(nn.Module):
         self.q_norm = RMSNorm(self.head_dim)
         self.k_norm = RMSNorm(self.head_dim)
 
-    def forward(self, x, kv_cache: Optional[KVCache] = None, start_pos: int = 0):
+    def forward(
+        self,
+        x,
+        kv_cache: Optional[KVCache] = None,
+        start_pos: int = 0,
+        # optional: we will apply causal on top of a base attn_mask, passed in special cases
+        # like [PAD] tokens in SFT or blocking cross sentence attn in best fit pretrain
+        base_attn_mask: torch.Tensor = None,
+        # optional: effient way to apply masking over cross sentence attn in best fit pretrain would
+        # be to pass doc_ids (B, T) instead of (B, T, T). only supported by 'varlen fa kernel' TODO: support
+        doc_ids: torch.Tensor = None,
+    ):
         bsz, seqlen, _ = x.shape
 
         q = self.wq(x).view(bsz, seqlen, self.n_heads, self.head_dim)
@@ -62,7 +73,14 @@ class GroupedQueryAttention(nn.Module):
 
         window_size = (self.window_size, -1) if self.window_size > 0 else (-1, -1)
         out = self.attention(
-            q, k, v, causal=True, window_size=window_size, kv_cache=kv_cache
+            q,
+            k,
+            v,
+            causal=True,
+            window_size=window_size,
+            kv_cache=kv_cache,
+            base_attn_mask=base_attn_mask,
+            doc_ids=doc_ids,
         )
 
         out = out.reshape(bsz, seqlen, -1)
@@ -104,7 +122,18 @@ class MultiHeadAttention(nn.Module):
         self.q_norm = RMSNorm(self.head_dim)
         self.k_norm = RMSNorm(self.head_dim)
 
-    def forward(self, x, kv_cache: Optional[KVCache] = None, start_pos: int = 0):
+    def forward(
+        self,
+        x,
+        kv_cache: Optional[KVCache] = None,
+        start_pos: int = 0,
+        # optional: we will apply causal on top of a base attn_mask, passed in special cases
+        # like [PAD] tokens in SFT or blocking cross sentence attn in best fit pretrain
+        base_attn_mask: torch.Tensor = None,
+        # optional: effient way to apply masking over cross sentence attn in best fit pretrain would
+        # be to pass doc_ids (B, T) instead of (B, T, T). only supported by 'varlen fa kernel' TODO: support
+        doc_ids: torch.Tensor = None,
+    ):
         bsz, seqlen, _ = x.shape
 
         q = self.wq(x).view(bsz, seqlen, self.n_heads, self.head_dim)
@@ -120,7 +149,14 @@ class MultiHeadAttention(nn.Module):
 
         window_size = (self.window_size, -1) if self.window_size > 0 else (-1, -1)
         out = self.attention(
-            q, k, v, causal=True, window_size=window_size, kv_cache=kv_cache
+            q,
+            k,
+            v,
+            causal=True,
+            window_size=window_size,
+            kv_cache=kv_cache,
+            base_attn_mask=base_attn_mask,
+            doc_ids=doc_ids,
         )
 
         out = out.reshape(bsz, seqlen, -1)
