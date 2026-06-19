@@ -1,5 +1,10 @@
+from abc import ABC
+
 import torch
 import torch.nn as nn
+
+
+class Norm(nn.Module, ABC): ...
 
 
 class RMSNorm(nn.Module):

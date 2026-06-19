@@ -8,6 +8,8 @@ import torch.nn.functional as F
 from mint.kvcache.base import KVCache
 
 
+# TODO: support custom bias for ALiBi pos embeddings
+# TODO: accept attention mask
 class FlashAttention(nn.Module):
     def __init__(self, use_custom_fa: bool = True):
         super().__init__()
@@ -37,11 +39,11 @@ class FlashAttention(nn.Module):
         if not torch.cuda.is_available():
             return None
         try:
-            from kernels.flash_attn import (
-                FlashAttentionKernel,  # pyright: ignore[reportMissingImports]
+            from kernels.flash_attn_mqa import (
+                FlashAttention,  # pyright: ignore[reportMissingImports]
             )
 
-            return FlashAttentionKernel
+            return FlashAttention
         except Exception:
             return None
 
@@ -78,7 +80,12 @@ class FlashAttention(nn.Module):
         window_size: tuple[int, int],
     ) -> torch.Tensor:
         # Try custom flash attention first if enabled
-        if self.use_custom_fa and self._use_custom_fa(q) and window_size == (-1, -1):
+        if (
+            self.use_custom_fa
+            and self._use_custom_fa(q)
+            and window_size == (-1, -1)
+            and q.shape[1] == k.shape[1]  # doesnt support GQA yet
+        ):
             custom_fa = self._custom_fa
             assert custom_fa is not None
             # Calculate softmax scale (tau)

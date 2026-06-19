@@ -1,8 +1,8 @@
-import urllib.request
-import ssl
-import zipfile
 import os
 import shutil
+import ssl
+import urllib.request
+import zipfile
 
 ssl_context = ssl.create_default_context()
 ssl_context.check_hostname = False
@@ -19,7 +19,6 @@ urllib.request.install_opener(opener)
 urllib.request.urlretrieve(url, filename)
 
 if os.path.exists(filename):
-    with zipfile.ZipFile(filename, 'r') as zip_ref:
-        zip_ref.extractall('data')
-    shutil.move(filename, 'dump/eval_bundle.zip')
-
+    with zipfile.ZipFile(filename, "r") as zip_ref:
+        zip_ref.extractall("data")
+    shutil.move(filename, "dump/eval_bundle.zip")
