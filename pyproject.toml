@@ -29,6 +29,15 @@ packages = ["goda"]
 [tool.ruff]
 line-length = 100
 target-version = "py312"
+exclude = [
+    "archive/",
+    "experiments/",
+    "tests/",
+    "scripts",
+    "kernels",
+    "wandb/",
+    "*.pyc",
+]
 
 [tool.ruff.lint]
 # Enable comprehensive rule sets for high-quality code
