@@ -2,10 +2,9 @@ from dataclasses import dataclass
 from typing import Callable
 
 import torch
+from mint.config.base import Config
 from torch import Tensor
 from torch.optim import Optimizer
-
-from mint.config.base import Config
 
 
 @dataclass
@@ -185,54 +184,73 @@ class MuonAdamW(Optimizer):
             )
 
     def _step_muon(self, group: dict) -> None:
-        params = group["params"]
+        params = [p for p in group["params"] if p.grad is not None]
         if not params:
             return
 
-        p = params[0]
-        state = self.state[p]
-        num_params = len(params)
-        shape, device, dtype = p.shape, p.device, p.dtype
-
-        if "momentum_buffer" not in state:
-            state["momentum_buffer"] = torch.zeros(
-                num_params, *shape, dtype=dtype, device=device
-            )
-        if "second_momentum_buffer" not in state:
-            state_shape = (
-                (num_params, shape[-2], 1)
-                if shape[-2] >= shape[-1]
-                else (num_params, 1, shape[-1])
-            )
-            state["second_momentum_buffer"] = torch.zeros(
-                state_shape, dtype=dtype, device=device
-            )
-
+        p0 = params[0]
+        shape = p0.shape
         red_dim = -1 if shape[-2] >= shape[-1] else -2
+        lr = group["lr"] * max(1.0, shape[-2] / shape[-1]) ** 0.5
+        momentum = group["momentum"]
+        beta2 = group["beta2"] if group["beta2"] is not None else 0.0
+        weight_decay = group["weight_decay"]
+        ns_steps = group["ns_steps"]
 
-        stacked_grads = torch.stack([p.grad for p in params])
-        stacked_params = torch.stack(params)
+        for p in params:
+            state = self.state[p]
 
-        self._muon_momentum_t.fill_(group["momentum"])
-        self._muon_beta2_t.fill_(group["beta2"] if group["beta2"] is not None else 0.0)
+            if "momentum_buffer" not in state:
+                state["momentum_buffer"] = torch.zeros_like(p)
+            if "second_momentum_buffer" not in state:
+                state_shape = (
+                    (shape[-2], 1) if shape[-2] >= shape[-1] else (1, shape[-1])
+                )
+                state["second_momentum_buffer"] = torch.zeros(
+                    state_shape, dtype=torch.float32, device=p.device
+                )
 
-        self._muon_lr_t.fill_(group["lr"] * max(1.0, shape[-2] / shape[-1]) ** 0.5)
-        self._muon_wd_t.fill_(group["weight_decay"])
+            grad = p.grad
+            assert grad is not None
 
-        self._fused_muon(
-            stacked_grads,
-            stacked_params,
-            state["momentum_buffer"],
-            state["second_momentum_buffer"],
-            self._muon_momentum_t,
-            self._muon_lr_t,
-            self._muon_wd_t,
-            self._muon_beta2_t,
-            group["ns_steps"],
-            red_dim,
-        )
+            momentum_buffer = state["momentum_buffer"]
+            second_momentum_buffer = state["second_momentum_buffer"]
 
-        torch._foreach_copy_(params, list(stacked_params.unbind(0)))
+            momentum_buffer.lerp_(grad, 1 - momentum)
+            g = grad.lerp(momentum_buffer, momentum)
+
+            X = g.float()
+            X = X / (X.norm(dim=(-2, -1), keepdim=True) * 1.01 + 1e-6)
+
+            if X.size(-2) > X.size(-1):
+                for a, b, c in POLAR_EXPRESS_COEFFS[:ns_steps]:
+                    A = X.mT @ X
+                    B = b * A + c * (A @ A)
+                    X = a * X + X @ B
+            else:
+                for a, b, c in POLAR_EXPRESS_COEFFS[:ns_steps]:
+                    A = X @ X.mT
+                    B = b * A + c * (A @ A)
+                    X = a * X + B @ X
+
+            g = X
+
+            v_mean = g.square().mean(dim=red_dim, keepdim=True)
+            red_dim_size = g.size(red_dim)
+            v_norm_sq = v_mean.sum(dim=(-2, -1), keepdim=True) * red_dim_size
+            v_norm = v_norm_sq.sqrt()
+
+            second_momentum_buffer.lerp_(v_mean, 1 - beta2)
+            step_scale = second_momentum_buffer.clamp_min(1e-10).rsqrt()
+            scaled_sq_sum = (v_mean * red_dim_size) * step_scale.square()
+            v_norm_new = scaled_sq_sum.sum(dim=(-2, -1), keepdim=True).sqrt()
+            final_scale = step_scale * (v_norm / v_norm_new.clamp_min(1e-10))
+            g = g * final_scale
+
+            mask = (g * p.float()) >= 0
+            update = lr * g
+            decay = lr * weight_decay * p.float() * mask
+            p.sub_((update + decay).to(p.dtype))
 
     @torch.no_grad()
     def step(self, closure: Callable[[], float] | None = None) -> float | None:  # type: ignore[override]
