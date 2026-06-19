@@ -20,6 +20,7 @@ class GQAGluBlock(nn.Module):
         seq_len: int,
         rope_base_theta: int,
         dtype: torch.dtype,
+        # optional: attn type indicating type of winodw to attend
         attention_type: str = "L",
     ) -> None:
         super().__init__()
@@ -44,10 +45,27 @@ class GQAGluBlock(nn.Module):
         self.ffn = GLU(embed_dim=embed_dim, hidden_dim=hidden_dim, dtype=dtype)
 
     def forward(
-        self, x: torch.Tensor, kv_cache: Optional[KVCache] = None, start_pos: int = 0
+        self,
+        x: torch.Tensor,
+        kv_cache: Optional[KVCache] = None,
+        start_pos: int = 0,
+        # optional: we will apply causal on top of a base attn_mask, passed in special cases
+        # like [PAD] tokens in SFT or blocking cross sentence attn in best fit pretrain
+        base_attn_mask: torch.Tensor = None,
+        # optional: effient way to apply masking over cross sentence attn in best fit pretrain would
+        # be to pass doc_ids (B, T) instead of (B, T, T). only supported by 'varlen fa kernel' TODO: support
+        doc_ids: torch.Tensor = None,
     ) -> torch.Tensor:
         h = self.pre_attn_norm(x)
-        h = x + self.post_attn_norm(self.gqa(h, kv_cache=kv_cache, start_pos=start_pos))
+        h = x + self.post_attn_norm(
+            self.gqa(
+                h,
+                kv_cache=kv_cache,
+                start_pos=start_pos,
+                base_attn_mask=base_attn_mask,
+                doc_ids=doc_ids,
+            )
+        )
         h_ffn = self.pre_ffn_norm(h)
         h = h + self.post_ffn_norm(self.ffn(h_ffn))
         return h
