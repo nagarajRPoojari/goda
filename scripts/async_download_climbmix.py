@@ -222,7 +222,7 @@ async def download_all_shards(
                     shard_pattern,
                     coordinator,
                     total_shards,
-                    USE_HF_HUB,
+                    use_hf=USE_HF_HUB,
                 )
 
         # Download all shards concurrently (with limit)

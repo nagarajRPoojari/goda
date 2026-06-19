@@ -22,7 +22,13 @@ class DistributedSFTDataloader(DistributedDataloader):
     ) -> None:
 
         super().__init__(
-            device, config.data_dir, config.batch_size, config.seq_length, tokenizer, args, kwargs
+            device,
+            config.data_dir,
+            config.batch_size,
+            config.seq_length,
+            tokenizer,
+            *args,
+            **kwargs,
         )
 
         self.datasets = datasets
