@@ -1,6 +1,6 @@
 [model]
-embed_dim = 128
-hidden_dim = 128
+embed_dim = 512
+hidden_dim = 2048
 seq_length = 512
 vocab_size = 50267
 n_layers = 2
@@ -10,12 +10,14 @@ head_dim = 128
 rope_base_theta = 100000
 tie_weights = true
 
+
+
 [train]
 mixed_precision = true
 use_meta_device = true
-compile_model = true
+compile_model = false
 train_num_steps = 10
-grad_clip = 1.0
+grad_clip = 1.2
 log_every_n_steps = 1
 eval_every_n_steps = 100
 eval_num_steps = 10
@@ -38,15 +40,15 @@ load_best_checkpoint = false
 
 
 [train.sched]
-unembedding_lr = 0.004
-embedding_lr = 0.2
-matrix_lr = 0.02
-scalar_lr = 0.5
+unembedding_lr = 0.0004
+embedding_lr = 0.002
+matrix_lr = 0.002
+scalar_lr = 0.05
+warmup_steps = 5
 muon_momentum_warmup_steps = 400
 muon_momentum_start = 0.85
 muon_momentum_peak = 0.97
 muon_momentum_final = 0.9
-warmup_steps = 100
 warmdown_ratio = 0.65
 final_lr_frac = 0.1
 weight_decay = 0.0
