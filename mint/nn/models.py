@@ -3,8 +3,6 @@ from typing import Optional
 
 import torch
 import torch.nn as nn
-from torch.utils.checkpoint import checkpoint
-
 from mint.kvcache.base import KVCache
 from mint.nn.base import ModelConfig
 from mint.nn.blocks import GQAGluBlock
@@ -12,6 +10,7 @@ from mint.nn.norm import RMSNorm
 from mint.optim.muon_adamw import MuonAdamW, MuonAdamWConfig
 from mint.trainer.scheduler import SchedulerConfig
 from mint.utils.logger import logger
+from torch.utils.checkpoint import checkpoint
 
 
 @dataclass
@@ -256,15 +255,16 @@ def configure_optimizer(
 
     for shape in sorted(shape_groups.keys()):
         group_params = shape_groups[shape]
-        logger.info(f"Muon group: shape {shape} with {len(group_params)} parameters")
+        logger.info(
+            f"Matrix params routed to AdamW for stability: shape {shape} with {len(group_params)} parameters"
+        )
         param_groups.append(
             {
-                "kind": "muon",
+                "kind": "adamw",
                 "params": group_params,
                 "lr": sched_cfg.matrix_lr,
-                "momentum": optim_cfg.muon_momentum,
-                "ns_steps": optim_cfg.muon_ns_steps,
-                "beta2": optim_cfg.muon_beta2,
+                "betas": (optim_cfg.adamw_beta1, optim_cfg.adamw_beta2_scalar),
+                "eps": optim_cfg.adamw_eps,
                 "weight_decay": sched_cfg.weight_decay,
             }
         )
