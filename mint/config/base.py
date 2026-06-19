@@ -80,7 +80,7 @@ class Config:
             raise FileNotFoundError(f"Config file not found: {toml_path}")
 
         # tomllib expects a binary file stream ('rb')
-        with Path.open(path, "rb") as f:
+        with Path(path).open(mode="rb") as f:
             config_dict = tomllib.load(f)
 
         return cls.from_dict(config_dict)

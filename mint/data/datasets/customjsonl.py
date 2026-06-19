@@ -11,8 +11,8 @@ class CustomJSON(SFTTrainDataset):
         self.filepath = filepath
         self.conversations = []
 
-        if Path.exists(filepath):
-            with Path.open(filepath, encoding="utf-8") as f:
+        if Path(filepath).exists():
+            with Path(filepath).open(encoding="utf-8") as f:
                 for line in f:
                     line_ = line.strip()
                     if line_:

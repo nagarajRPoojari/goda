@@ -67,10 +67,10 @@ class SpellingBee(SFTTrainDataset, SFTEvalDataset):
     def _load_words(self) -> list:
 
         cache_path = "/tmp/words_alpha.txt"  # noqa: S108
-        if not Path.exists(cache_path):
+        if not Path(cache_path).exists():
             urllib.request.urlretrieve(WORD_LIST_URL, cache_path)  # noqa: S310
 
-        with Path.open(cache_path) as f:
+        with Path(cache_path).open() as f:
             return [line.strip() for line in f]
 
     def _create_user_message(self, rng: random.Random, word: str, letter: str) -> str:
@@ -137,7 +137,7 @@ class SimpleSpelling(SFTTrainDataset):
         if not Path.exists(cache_path):
             urllib.request.urlretrieve(WORD_LIST_URL, cache_path)  # noqa: S310
 
-        with Path.open(cache_path) as f:
+        with Path(cache_path).open() as f:
             words = [line.strip() for line in f]
 
         rng = random.Random(42)  # noqa: S311

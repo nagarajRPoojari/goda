@@ -1,3 +1,4 @@
+from pathlib import Path
 import random
 import re
 from typing import Any, Literal
@@ -64,7 +65,7 @@ class SpellingBee(SFTTrainDataset, SFTEvalDataset):
         import urllib.request
 
         cache_path = "/tmp/words_alpha.txt"
-        if not os.path.exists(cache_path):
+        if not Path(cache_path).exists():
             urllib.request.urlretrieve(WORD_LIST_URL, cache_path)
 
         with open(cache_path) as f:
@@ -133,7 +134,7 @@ class SimpleSpelling(SFTTrainDataset):
         import urllib.request
 
         cache_path = "/tmp/words_alpha.txt"
-        if not os.path.exists(cache_path):
+        if not Path(cache_path).exists():
             urllib.request.urlretrieve(WORD_LIST_URL, cache_path)
 
         with open(cache_path) as f:

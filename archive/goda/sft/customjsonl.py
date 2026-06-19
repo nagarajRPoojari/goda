@@ -1,5 +1,6 @@
 import json
 import os
+from pathlib import Path
 from typing import Any
 
 from goda.sft.base import SFTTrainDataset
@@ -11,7 +12,7 @@ class CustomJSON(SFTTrainDataset):
         self.filepath = filepath
         self.conversations = []
 
-        if os.path.exists(filepath):
+        if Path(filepath).exists():
             with open(filepath, encoding="utf-8") as f:
                 for line in f:
                     line = line.strip()
