@@ -38,7 +38,7 @@ class DistributedDataloader(Sampler, ABC):
     @abstractmethod
     def batch_loader(
         self, split: str = "train", resume_state: dict | None = None
-    ) -> Generator[Tuple[torch.Tensor, ...], None, None]:
+    ) -> Generator[Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]]:
         raise NotImplementedError
 
     @abstractmethod
