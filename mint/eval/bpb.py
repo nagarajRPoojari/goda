@@ -4,16 +4,14 @@ from typing import Any
 
 import torch
 import torch.distributed as dist
-import torch.nn as nn
+from torch import nn
 
 from mint.eval.base import EvalConfig, Evaluator
 from mint.utils.device import Device
 
 
 class BPBEvaluator(Evaluator):
-    def __init__(
-        self, model: nn.Module, config: EvalConfig, device: Device, dataloader: Any
-    ):
+    def __init__(self, model: nn.Module, config: EvalConfig, device: Device, dataloader: Any):
         super().__init__(model, config, device)
         self.dataloader = dataloader
 
@@ -55,9 +53,7 @@ class BPBEvaluator(Evaluator):
         # TODO: divide it by bytes per token ratio
 
         tokens_per_second = (
-            (total_tokens * self.process_info["world_size"]) / eval_time
-            if eval_time > 0
-            else 0.0
+            (total_tokens * self.process_info["world_size"]) / eval_time if eval_time > 0 else 0.0
         )
 
         return {

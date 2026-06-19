@@ -1,26 +1,27 @@
-from abc import ABC, abstractmethod
-from typing import Dict, Any, Literal
+from abc import abstractmethod
+from typing import Any, Literal
+
 
 class SFTDataset:
     def __init__(self) -> None:
         super().__init__()
         self.index = 0
-    
+
     @abstractmethod
     def __len__(self) -> int:
         ...
-    
+
     @abstractmethod
-    def __getitem__(self, index: int) -> Dict[str, Any]:
+    def __getitem__(self, index: int) -> dict[str, Any]:
         ...
 
 
 class SFTTrainDataset(SFTDataset):
-    def next(self) -> Dict[str, Any]:
+    def next(self) -> dict[str, Any]:
         example = self[self.index]
         self.index = (self.index + 1) % len(self)
         return example
-    
+
     def reset(self) -> None:
         self.index = 0
 
@@ -28,14 +29,14 @@ class SFTTrainDataset(SFTDataset):
 class SFTEvalDataset(SFTDataset):
     def __init__(self) -> None:
         super().__init__()
-    
+
     @property
     @abstractmethod
     def eval_type(self) -> Literal["categorical", "generative"]:
         ...
-    
+
     @abstractmethod
-    def evaluate(self, conversation: Dict[str, Any], completion: str) -> bool:
+    def evaluate(self, conversation: dict[str, Any], completion: str) -> bool:
         ...
 
 

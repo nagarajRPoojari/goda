@@ -1,11 +1,14 @@
 import random
 import re
-from typing import Any, Dict, Literal
+from typing import Any, Literal
 
 from mint.data.datasets.base import SFTEvalDataset, SFTTrainDataset
 
+
 LETTERS = "abcdefghijklmnopqrstuvwxyz"
-WORD_LIST_URL = "https://raw.githubusercontent.com/dwyl/english-words/refs/heads/master/words_alpha.txt"
+WORD_LIST_URL = (
+    "https://raw.githubusercontent.com/dwyl/english-words/refs/heads/master/words_alpha.txt"
+)
 TEST_SEED_OFFSET = 10_000_000
 
 USER_TEMPLATES = [
@@ -20,9 +23,7 @@ USER_TEMPLATES = [
 class SpellingBee(SFTTrainDataset, SFTEvalDataset):
     ANSWER_RE = re.compile(r"#### (\-?[0-9\.\,]+)")
 
-    def __init__(
-        self, size: int = 1000, split: Literal["train", "test"] = "train"
-    ) -> None:
+    def __init__(self, size: int = 1000, split: Literal["train", "test"] = "train") -> None:
         super().__init__()
         self.size = size
         self.split = split
@@ -35,7 +36,7 @@ class SpellingBee(SFTTrainDataset, SFTEvalDataset):
     def __len__(self) -> int:
         return self.size
 
-    def __getitem__(self, index: int) -> Dict[str, Any]:
+    def __getitem__(self, index: int) -> dict[str, Any]:
         seed = index if self.split == "train" else TEST_SEED_OFFSET + index
         rng = random.Random(seed)
 
@@ -53,7 +54,7 @@ class SpellingBee(SFTTrainDataset, SFTEvalDataset):
             ]
         }
 
-    def evaluate(self, conversation: Dict[str, Any], completion: str) -> bool:
+    def evaluate(self, conversation: dict[str, Any], completion: str) -> bool:
         ground_truth_parts = conversation["messages"][-1]["content"]
         ground_truth_text = ground_truth_parts[-1]["text"]
 
@@ -69,7 +70,7 @@ class SpellingBee(SFTTrainDataset, SFTEvalDataset):
         if not os.path.exists(cache_path):
             urllib.request.urlretrieve(WORD_LIST_URL, cache_path)
 
-        with open(cache_path, "r") as f:
+        with open(cache_path) as f:
             return [line.strip() for line in f]
 
     def _create_user_message(self, rng: random.Random, word: str, letter: str) -> str:
@@ -78,9 +79,7 @@ class SpellingBee(SFTTrainDataset, SFTEvalDataset):
             template = template.lower()
 
         quote = rng.choice(["", "'", '"'])
-        msg = template.format(
-            letter=f"{quote}{letter}{quote}", word=f"{quote}{word}{quote}"
-        )
+        msg = template.format(letter=f"{quote}{letter}{quote}", word=f"{quote}{word}{quote}")
         return msg + "?" if rng.random() < 0.5 else msg
 
     def _create_assistant_parts(self, word: str, letter: str, count: int) -> list:
@@ -111,9 +110,7 @@ class SpellingBee(SFTTrainDataset, SFTEvalDataset):
 
 
 class SimpleSpelling(SFTTrainDataset):
-    def __init__(
-        self, size: int = 1000, split: Literal["train", "test"] = "train"
-    ) -> None:
+    def __init__(self, size: int = 1000, split: Literal["train", "test"] = "train") -> None:
         super().__init__()
         self.size = size
         self.split = split
@@ -122,7 +119,7 @@ class SimpleSpelling(SFTTrainDataset):
     def __len__(self) -> int:
         return self.size
 
-    def __getitem__(self, index: int) -> Dict[str, Any]:
+    def __getitem__(self, index: int) -> dict[str, Any]:
         seed = index if self.split == "train" else TEST_SEED_OFFSET + index
         rng = random.Random(seed)
         word = rng.choice(self.words)
@@ -142,7 +139,7 @@ class SimpleSpelling(SFTTrainDataset):
         if not os.path.exists(cache_path):
             urllib.request.urlretrieve(WORD_LIST_URL, cache_path)
 
-        with open(cache_path, "r") as f:
+        with open(cache_path) as f:
             words = [line.strip() for line in f]
 
         rng = random.Random(42)

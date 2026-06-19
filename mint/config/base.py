@@ -2,7 +2,8 @@ import tomllib  # <-- Built-in in Python 3.11+
 import types
 from dataclasses import dataclass, fields, is_dataclass
 from pathlib import Path
-from typing import Any, Dict, Type, TypeVar, Union, get_args, get_origin
+from typing import Any, TypeVar, Union, get_args, get_origin
+
 
 T = TypeVar("T", bound="Config")
 
@@ -10,7 +11,7 @@ T = TypeVar("T", bound="Config")
 @dataclass
 class Config:
     @classmethod
-    def from_dict(cls: Type[T], data: Dict[str, Any]) -> T:
+    def from_dict(cls: type[T], data: dict[str, Any]) -> T:
         """Recursively parses a dictionary into the target dataclass schema."""
         if not data:
             return cls()
@@ -24,9 +25,7 @@ class Config:
 
                 # Resolve Union/Optional types
                 origin = get_origin(field_type)
-                if origin is Union or (
-                    hasattr(types, "UnionType") and origin is types.UnionType
-                ):
+                if origin is Union or (hasattr(types, "UnionType") and origin is types.UnionType):
                     for arg in get_args(field_type):
                         if is_dataclass(arg):
                             field_type = arg
@@ -46,7 +45,7 @@ class Config:
         return cls(**init_kwargs)
 
     @classmethod
-    def _load_plain_dataclass(cls, target_cls: Type, data: Dict[str, Any]) -> Any:
+    def _load_plain_dataclass(cls, target_cls: type, data: dict[str, Any]) -> Any:
         """Helper to recursively parse vanilla dataclasses."""
         if not isinstance(data, dict):
             return data
@@ -58,9 +57,7 @@ class Config:
             if key in class_fields:
                 field_type = class_fields[key]
                 origin = get_origin(field_type)
-                if origin is Union or (
-                    hasattr(types, "UnionType") and origin is types.UnionType
-                ):
+                if origin is Union or (hasattr(types, "UnionType") and origin is types.UnionType):
                     for arg in get_args(field_type):
                         if is_dataclass(arg):
                             field_type = arg
@@ -76,7 +73,7 @@ class Config:
         return target_cls(**init_kwargs)
 
     @classmethod
-    def from_toml(cls: Type[T], toml_path: str) -> T:
+    def from_toml(cls: type[T], toml_path: str) -> T:
         """Loads a TOML file and passes it to the dictionary parser."""
         path = Path(toml_path)
         if not path.exists():

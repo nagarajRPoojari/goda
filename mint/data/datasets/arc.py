@@ -1,4 +1,4 @@
-from typing import Any, Dict, Literal
+from typing import Any, Literal
 
 from datasets import load_dataset
 
@@ -21,7 +21,7 @@ class ARC(SFTTrainDataset, SFTEvalDataset):
     def __len__(self) -> int:
         return len(self.ds)
 
-    def __getitem__(self, index: int) -> Dict[str, Any]:
+    def __getitem__(self, index: int) -> dict[str, Any]:
         row: dict[Any, Any] = self.ds[index]
         letters = tuple(row["choices"]["label"])
         user_msg = build_mc_prompt(row["question"], letters, row["choices"]["text"])
@@ -34,5 +34,5 @@ class ARC(SFTTrainDataset, SFTEvalDataset):
             "letters": letters,
         }
 
-    def evaluate(self, conversation: Dict[str, Any], completion: str) -> bool:
+    def evaluate(self, conversation: dict[str, Any], completion: str) -> bool:
         return completion == conversation["messages"][-1]["content"]

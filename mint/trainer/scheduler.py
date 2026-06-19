@@ -50,11 +50,10 @@ class Scheduler:
     def get_lr_multiplier(self, step: int) -> float:
         if step < self.warmup_steps:
             return (step + 1) / self.warmup_steps
-        elif step <= self.warmdown_start:
+        if step <= self.warmdown_start:
             return 1.0
-        else:
-            progress = (self.num_iterations - step) / self.warmdown_iters
-            return progress * 1.0 + (1 - progress) * self.final_lr_frac
+        progress = (self.num_iterations - step) / self.warmdown_iters
+        return progress * 1.0 + (1 - progress) * self.final_lr_frac
 
     def get_muon_momentum(self, step: int) -> float:
         if step < self.muon_momentum_warmup_steps:
@@ -62,14 +61,13 @@ class Scheduler:
             return (
                 1 - frac
             ) * self.muon_momentum_start + frac * self.muon_momentum_peak
-        elif step >= self.warmdown_start:
+        if step >= self.warmdown_start:
             progress = (step - self.warmdown_start) / self.warmdown_iters
             return (
                 self.muon_momentum_peak * (1 - progress)
                 + self.muon_momentum_final * progress
             )
-        else:
-            return self.muon_momentum_peak
+        return self.muon_momentum_peak
 
     def get_weight_decay(self, step: int) -> float:
         return (

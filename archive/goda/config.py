@@ -6,6 +6,7 @@ import yaml
 
 from goda.tokenizer import Tokenizer
 
+
 tokenizer = Tokenizer()
 
 
@@ -102,7 +103,7 @@ class Config:
         if not path.exists():
             raise FileNotFoundError(f"Config file not found: {yaml_path}")
 
-        with open(path, "r") as f:
+        with open(path) as f:
             config_dict = yaml.safe_load(f)
 
         for key, value in config_dict.items():

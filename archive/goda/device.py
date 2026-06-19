@@ -1,10 +1,13 @@
 import os
+
 import torch
 import torch.distributed as dist
 from torch.amp.autocast_mode import autocast
 from torch.amp.grad_scaler import GradScaler
-from goda.logger import logger
+
 from goda.config import Config
+from goda.logger import logger
+
 
 class Device:
     def __init__(self, config: Config):
@@ -40,7 +43,11 @@ class Device:
         if self.is_mps:
             logger.info("MPS device active (fp32)")
         elif self.is_cuda:
-            amp_dtype = str(self.amp_dtype).replace("torch.", "") if self.amp_dtype is not None else "disabled"
+            amp_dtype = (
+                str(self.amp_dtype).replace("torch.", "")
+                if self.amp_dtype is not None
+                else "disabled"
+            )
             logger.info(f"CUDA device active | AMP={self.use_amp} | dtype={amp_dtype}")
         else:
             logger.info("CPU device active")
@@ -59,17 +66,17 @@ class Device:
             logger.warning(f"Model compilation failed: {e}")
             return model
         return model
-    
+
     def move_to_device(self, model, from_meta: bool = False):
         logger.info(f"Moving model to {self.device}...")
-        
+
         if from_meta:
             logger.info("Materializing model from meta device...")
             model = model.to_empty(device=self.device)
-            model.apply(lambda m: m.reset_parameters() if hasattr(m, 'reset_parameters') else None)
+            model.apply(lambda m: m.reset_parameters() if hasattr(m, "reset_parameters") else None)
         else:
             model = model.to(self.device)
-        
+
         return model
 
     def autocast(self):

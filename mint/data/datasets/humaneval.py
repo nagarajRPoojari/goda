@@ -1,5 +1,5 @@
 import re
-from typing import Any, Dict, Literal
+from typing import Any, Literal
 
 from datasets import load_dataset
 
@@ -19,7 +19,7 @@ class HumanEval(SFTTrainDataset, SFTEvalDataset):
     def __len__(self) -> int:
         return len(self.ds)
 
-    def __getitem__(self, index: int) -> Dict[str, Any]:
+    def __getitem__(self, index: int) -> dict[str, Any]:
         row = self.ds[index]
         solution = f"{row['prompt']}\n{row['canonical_solution']}"
 
@@ -32,11 +32,13 @@ class HumanEval(SFTTrainDataset, SFTEvalDataset):
             "test": row["test"],
         }
 
-    def evaluate(self, conversation: Dict[str, Any], completion: str) -> bool:
+    def evaluate(self, conversation: dict[str, Any], completion: str) -> bool:
         imports = self._extract_imports(conversation["messages"][0]["content"])
         code = self._extract_code(completion)
 
-        program = f"{imports}\n\n{code}\n\n{conversation['test']}\ncheck({conversation['entry_point']})"
+        program = (
+            f"{imports}\n\n{code}\n\n{conversation['test']}\ncheck({conversation['entry_point']})"
+        )
         result = execute_code(program)
         return result.success
 

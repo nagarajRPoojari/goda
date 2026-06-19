@@ -2,8 +2,9 @@ import os
 from typing import Any
 
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
+from torch import nn
+
 from mint.kvcache.base import KVCache
 
 

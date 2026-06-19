@@ -1,7 +1,9 @@
-import re
 import random
-from typing import Dict, Any, Literal
-from goda.sft.base import SFTTrainDataset, SFTEvalDataset
+import re
+from typing import Any, Literal
+
+from goda.sft.base import SFTEvalDataset, SFTTrainDataset
+
 
 LETTERS = "abcdefghijklmnopqrstuvwxyz"
 WORD_LIST_URL = "https://raw.githubusercontent.com/dwyl/english-words/refs/heads/master/words_alpha.txt"
@@ -31,17 +33,17 @@ class SpellingBee(SFTTrainDataset, SFTEvalDataset):
     def __len__(self) -> int:
         return self.size
 
-    def __getitem__(self, index: int) -> Dict[str, Any]:
-        seed = index if self.split == 'train' else TEST_SEED_OFFSET + index
+    def __getitem__(self, index: int) -> dict[str, Any]:
+        seed = index if self.split == "train" else TEST_SEED_OFFSET + index
         rng = random.Random(seed)
-        
+
         word = rng.choice(self.words)
         letter = rng.choice(word) if rng.random() < 0.9 else rng.choice(LETTERS)
         count = word.count(letter)
-        
+
         user_msg = self._create_user_message(rng, word, letter)
         assistant_parts = self._create_assistant_parts(word, letter, count)
-        
+
         return {
             "messages": [
                 {"role": "user", "content": user_msg},
@@ -49,38 +51,38 @@ class SpellingBee(SFTTrainDataset, SFTEvalDataset):
             ]
         }
 
-    def evaluate(self, conversation: Dict[str, Any], completion: str) -> bool:
-        ground_truth_parts = conversation['messages'][-1]['content']
-        ground_truth_text = ground_truth_parts[-1]['text']
-        
+    def evaluate(self, conversation: dict[str, Any], completion: str) -> bool:
+        ground_truth_parts = conversation["messages"][-1]["content"]
+        ground_truth_text = ground_truth_parts[-1]["text"]
+
         ref_num = self._extract_answer(ground_truth_text)
         pred_num = self._extract_answer(completion)
         return pred_num == ref_num
 
     def _load_words(self) -> list:
-        import urllib.request
         import os
-        
+        import urllib.request
+
         cache_path = "/tmp/words_alpha.txt"
         if not os.path.exists(cache_path):
             urllib.request.urlretrieve(WORD_LIST_URL, cache_path)
-        
-        with open(cache_path, 'r') as f:
+
+        with open(cache_path) as f:
             return [line.strip() for line in f]
 
     def _create_user_message(self, rng: random.Random, word: str, letter: str) -> str:
         template = rng.choice(USER_TEMPLATES)
         if rng.random() < 0.3:
             template = template.lower()
-        
-        quote = rng.choice(['', "'", '"'])
+
+        quote = rng.choice(["", "'", '"'])
         msg = template.format(letter=f"{quote}{letter}{quote}", word=f"{quote}{word}{quote}")
         return msg + "?" if rng.random() < 0.5 else msg
 
     def _create_assistant_parts(self, word: str, letter: str, count: int) -> list:
         parts = []
         word_letters = ",".join(list(word))
-        
+
         manual_text = f"Let me spell '{word}': {word_letters}\n\nCounting '{letter}':\n"
         running_count = 0
         for i, char in enumerate(word, 1):
@@ -90,13 +92,13 @@ class SpellingBee(SFTTrainDataset, SFTEvalDataset):
             else:
                 manual_text += f"{i}:{char}\n"
         manual_text += f"\nManual count: {running_count}"
-        
+
         parts.append({"type": "text", "text": manual_text})
         parts.append({"type": "text", "text": "\n\nVerifying with Python:\n\n"})
         parts.append({"type": "python", "text": f"'{word}'.count('{letter}')"})
         parts.append({"type": "python_output", "text": str(count)})
         parts.append({"type": "text", "text": f"\n\nFinal answer:\n\n#### {count}"})
-        
+
         return parts
 
     def _extract_answer(self, text: str) -> str | None:
@@ -114,11 +116,11 @@ class SimpleSpelling(SFTTrainDataset):
     def __len__(self) -> int:
         return self.size
 
-    def __getitem__(self, index: int) -> Dict[str, Any]:
-        seed = index if self.split == 'train' else TEST_SEED_OFFSET + index
+    def __getitem__(self, index: int) -> dict[str, Any]:
+        seed = index if self.split == "train" else TEST_SEED_OFFSET + index
         rng = random.Random(seed)
         word = rng.choice(self.words)
-        
+
         return {
             "messages": [
                 {"role": "user", "content": f"Spell the word: {word}"},
@@ -127,16 +129,16 @@ class SimpleSpelling(SFTTrainDataset):
         }
 
     def _load_words(self) -> list:
-        import urllib.request
         import os
-        
+        import urllib.request
+
         cache_path = "/tmp/words_alpha.txt"
         if not os.path.exists(cache_path):
             urllib.request.urlretrieve(WORD_LIST_URL, cache_path)
-        
-        with open(cache_path, 'r') as f:
+
+        with open(cache_path) as f:
             words = [line.strip() for line in f]
-        
+
         rng = random.Random(42)
         rng.shuffle(words)
         return words

@@ -1,7 +1,6 @@
 import math
-from typing import List, Optional
 
-import torch.nn as nn
+from torch import nn
 
 from .base import Adapter
 
@@ -38,7 +37,7 @@ class LoRA(Adapter):
     def apply(
         self,
         model: nn.Module,
-        target_modules: Optional[List[str]] = None,
+        target_modules: list[str] | None = None,
         r: int = 8,
         alpha: int = 16,
     ):

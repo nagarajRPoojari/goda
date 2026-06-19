@@ -2,7 +2,7 @@ import argparse
 from dataclasses import dataclass
 
 import torch
-import torch.nn as nn
+from torch import nn
 
 from goda.logger import logger
 from mint.config.base import Config
@@ -85,9 +85,7 @@ def main():
         logger.error(
             f"Config vocab_size ({config.model.vocab_size}) does not match tokenizer vocab_size ({tokenizer.vocab_size})"
         )
-        logger.error(
-            f"Please update the config file to set vocab_size: {tokenizer.vocab_size}"
-        )
+        logger.error(f"Please update the config file to set vocab_size: {tokenizer.vocab_size}")
         raise ValueError(
             f"Vocab size mismatch: config={config.model.vocab_size}, tokenizer={tokenizer.vocab_size}"
         )

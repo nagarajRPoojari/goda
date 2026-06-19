@@ -1,23 +1,22 @@
-from goda.sft.base import SFTEvalDataset
-from goda.tokenizer import Tokenizer
-from typing import Any
-from abc import ABC, abstractmethod
-
-from goda.device import Device
-from goda.config import Config
-from goda.logger import logger
 import json
-import random
-from pathlib import Path
 import math
+import random
 import time
+from abc import ABC, abstractmethod
+from enum import Enum
+from pathlib import Path
+from typing import Any
 
 import torch
-import torch.nn as nn
 import torch.distributed as dist
 import yaml
+from torch import nn
 
-from enum import Enum
+from goda.config import Config
+from goda.device import Device
+from goda.sft.base import SFTEvalDataset
+from goda.tokenizer import Tokenizer
+
 
 class Task(Enum):
     MC = "multiple_choice"
@@ -26,24 +25,22 @@ class Task(Enum):
 
 
 class Evaluator(ABC):
-    
     def __init__(self, model: nn.Module, config: Config, device: Device):
         self.model = model
         self.config = config
         self.device = device
         self.process_info = device.process_info()
-    
+
     @abstractmethod
     def evaluate(self, *args, **kwargs) -> dict[str, Any]:
         pass
 
 
 class BPBEvaluator(Evaluator):
-    
     def __init__(self, model: nn.Module, config: Config, device: Device, dataloader: Any):
         super().__init__(model, config, device)
         self.dataloader = dataloader
-    
+
     def evaluate(self, num_steps: int = 10, step: int | None = None) -> dict[str, Any]:
         self.model.eval()
         total_loss = 0.0
@@ -51,15 +48,16 @@ class BPBEvaluator(Evaluator):
         total_tokens = 0
 
         with torch.no_grad():
-            for eval_step, (inputs, targets) in enumerate(self.dataloader.batch_loader(split="val")):
+            for eval_step, (inputs, targets) in enumerate(
+                self.dataloader.batch_loader(split="val")
+            ):
                 if eval_step >= num_steps:
                     break
 
                 with self.device.autocast():
                     logits = self.model(inputs)
                     loss = nn.functional.cross_entropy(
-                        logits.view(-1, logits.size(-1)),
-                        targets.view(-1)
+                        logits.view(-1, logits.size(-1)), targets.view(-1)
                     )
 
                 total_loss += loss.item()
@@ -68,19 +66,21 @@ class BPBEvaluator(Evaluator):
         self.device.synchronize()
         eval_time = time.perf_counter() - eval_start_time
         avg_loss = total_loss / num_steps
-        
+
         # Reduce validation loss across all GPUs to get global average
         if self.process_info["distributed"]:
             avg_loss_tensor = torch.tensor(avg_loss, device=self.device.device)
             dist.all_reduce(avg_loss_tensor, op=dist.ReduceOp.AVG)
             avg_loss = avg_loss_tensor.item()
-        
+
         # Calculate bits per byte (BPB) metric
         # BPB = loss / ln(2), converting from nats to bits
         bpb: float = avg_loss / math.log(2)
         # TODO: divide it by bytes per token ratio
-        
-        tokens_per_second = (total_tokens * self.process_info["world_size"]) / eval_time if eval_time > 0 else 0.0
+
+        tokens_per_second = (
+            (total_tokens * self.process_info["world_size"]) / eval_time if eval_time > 0 else 0.0
+        )
 
         return {
             "loss": avg_loss,
@@ -91,8 +91,16 @@ class BPBEvaluator(Evaluator):
 
 
 class CoreEvaluator(Evaluator):
-
-    def __init__(self, model: nn.Module, config: Config, tokenizer: Tokenizer, device: Device, bundle_dir: str = "data/eval_bundle", config_path: str = "data/eval_bundle/core.yaml", seed: int = 42):
+    def __init__(
+        self,
+        model: nn.Module,
+        config: Config,
+        tokenizer: Tokenizer,
+        device: Device,
+        bundle_dir: str = "data/eval_bundle",
+        config_path: str = "data/eval_bundle/core.yaml",
+        seed: int = 42,
+    ):
         super().__init__(model, config, device)
         self.tokenizer = tokenizer
         self.bundle_dir = Path(bundle_dir)
@@ -102,7 +110,7 @@ class CoreEvaluator(Evaluator):
         if self.pad_token_id is None:
             raise ValueError("tokenizer.pad_token is required")
 
-        with open(self.config_path, "r") as f:
+        with open(self.config_path) as f:
             raw = yaml.safe_load(f)
 
         self.tasks = raw.get("icl_tasks", [])
@@ -133,7 +141,9 @@ class CoreEvaluator(Evaluator):
             }
 
         core = sum(task_result["accuracy"] for task_result in results.values()) / len(results)
-        tokens_per_second = (total_examples * self.process_info["world_size"]) / eval_time if eval_time > 0 else 0.0
+        tokens_per_second = (
+            (total_examples * self.process_info["world_size"]) / eval_time if eval_time > 0 else 0.0
+        )
         return {
             "tasks": results,
             "core": core,
@@ -175,7 +185,9 @@ class CoreEvaluator(Evaluator):
             prompts = self._render_multiple_choice(item, fewshot_examples, continuation_delimiter)
             token_lists = self._encode_prompts(prompts)
             prompt_token_lists = self._encode_prompts(
-                self._render_multiple_choice_prefixes(item, fewshot_examples, continuation_delimiter)
+                self._render_multiple_choice_prefixes(
+                    item, fewshot_examples, continuation_delimiter
+                )
             )
             losses = []
             for full_tokens, prompt_tokens in zip(token_lists, prompt_token_lists):
@@ -196,7 +208,9 @@ class CoreEvaluator(Evaluator):
             return pred == item["gold"]
 
         if task_type == Task.LM:
-            prompt, full = self._render_language_modeling(item, fewshot_examples, continuation_delimiter)
+            prompt, full = self._render_language_modeling(
+                item, fewshot_examples, continuation_delimiter
+            )
             prompt_tokens = self._encode_single(prompt)
             full_tokens = self._encode_single(full)
             return self._language_model_exact_match(full_tokens, len(prompt_tokens))
@@ -204,7 +218,7 @@ class CoreEvaluator(Evaluator):
     def _load_dataset(self, dataset_uri: str):
         path = self.bundle_dir / "eval_data" / dataset_uri
         rows = []
-        with open(path, "r") as f:
+        with open(path) as f:
             for line in f:
                 line = line.strip()
                 if line:
@@ -220,8 +234,7 @@ class CoreEvaluator(Evaluator):
         if task_meta.get("has_categories") and "category" in data[idx]:
             category = data[idx]["category"]
             candidate_indices = [
-                i for i, row in enumerate(data)
-                if i != idx and row.get("category") == category
+                i for i, row in enumerate(data) if i != idx and row.get("category") == category
             ]
         else:
             candidate_indices = [i for i in range(len(data)) if i != idx]
@@ -235,22 +248,30 @@ class CoreEvaluator(Evaluator):
         return [data[i] for i in chosen]
 
     def _render_multiple_choice(self, item: dict, fewshot_examples: list[dict], delimiter: str):
-        prompt_prefix = self._render_multiple_choice_shared_prefix(item, fewshot_examples, delimiter)
+        prompt_prefix = self._render_multiple_choice_shared_prefix(
+            item, fewshot_examples, delimiter
+        )
         return [prompt_prefix + choice for choice in item["choices"]]
 
-    def _render_multiple_choice_prefixes(self, item: dict, fewshot_examples: list[dict], delimiter: str):
-        prompt_prefix = self._render_multiple_choice_shared_prefix(item, fewshot_examples, delimiter)
+    def _render_multiple_choice_prefixes(
+        self, item: dict, fewshot_examples: list[dict], delimiter: str
+    ):
+        prompt_prefix = self._render_multiple_choice_shared_prefix(
+            item, fewshot_examples, delimiter
+        )
         return [prompt_prefix for _ in item["choices"]]
 
-    def _render_multiple_choice_shared_prefix(self, item: dict, fewshot_examples: list[dict], delimiter: str):
+    def _render_multiple_choice_shared_prefix(
+        self, item: dict, fewshot_examples: list[dict], delimiter: str
+    ):
         parts = []
         for example in fewshot_examples:
-            parts.append(f'{example["query"]}{delimiter}{example["choices"][example["gold"]]}')
-        parts.append(f'{item["query"]}{delimiter}')
+            parts.append(f"{example['query']}{delimiter}{example['choices'][example['gold']]}")
+        parts.append(f"{item['query']}{delimiter}")
         return "\n\n".join(parts)
 
     def _render_schema(self, item: dict, fewshot_examples: list[dict], delimiter: str):
-        shared_suffix = f'{delimiter}{item["continuation"]}'
+        shared_suffix = f"{delimiter}{item['continuation']}"
         prompts = []
         prefix = self._render_schema_fewshot_prefix(fewshot_examples, delimiter)
         for option in item["context_options"]:
@@ -274,17 +295,15 @@ class CoreEvaluator(Evaluator):
         parts = []
         for example in fewshot_examples:
             parts.append(
-                f'{example["context_options"][example["gold"]]}{delimiter}{example["continuation"]}'
+                f"{example['context_options'][example['gold']]}{delimiter}{example['continuation']}"
             )
         return "\n\n".join(parts)
 
     def _render_language_modeling(self, item: dict, fewshot_examples: list[dict], delimiter: str):
         parts = []
         for example in fewshot_examples:
-            parts.append(
-                f'{example["context"].rstrip()}{delimiter}{example["continuation"]}'
-            )
-        prefix = f'{item["context"].rstrip()}{delimiter}'
+            parts.append(f"{example['context'].rstrip()}{delimiter}{example['continuation']}")
+        prefix = f"{item['context'].rstrip()}{delimiter}"
         if parts:
             prompt = "\n\n".join(parts + [prefix])
         else:
@@ -349,56 +368,63 @@ class CoreEvaluator(Evaluator):
         start = max(prompt_len - 1, 0)
         end = len(full_tokens) - 1
         predicted = predictions[start:end]
-        actual = input_ids[0, start + 1:end + 1]
+        actual = input_ids[0, start + 1 : end + 1]
         if predicted.numel() == 0:
             return False
         return bool(torch.equal(predicted, actual))
 
 
 class ChatCoreEvaluator(Evaluator):
-    def __init__(self, model: nn.Module, config: Config, tokenizer: Tokenizer, device: Device, datasets: list[SFTEvalDataset]):
+    def __init__(
+        self,
+        model: nn.Module,
+        config: Config,
+        tokenizer: Tokenizer,
+        device: Device,
+        datasets: list[SFTEvalDataset],
+    ):
         super().__init__(model, config, device)
         self.tokenizer = tokenizer
         self.datasets = datasets
-    
+
     def evaluate(self, num_examples: int | None = None) -> dict[str, Any]:
         self.model.eval()
         eval_start_time = time.perf_counter()
         results = {}
-        
+
         with torch.no_grad():
             for dataset in self.datasets:
                 results[dataset.__class__.__name__] = self._evaluate_dataset(dataset, num_examples)
-        
+
         self.device.synchronize()
         eval_time = time.perf_counter() - eval_start_time
-        
+
         if not results:
             return {"tasks": {}, "accuracy": 0.0, "eval_time_sec": eval_time}
-        
+
         avg_accuracy = sum(r["accuracy"] for r in results.values()) / len(results)
         return {
             "tasks": results,
             "accuracy": avg_accuracy,
             "eval_time_sec": eval_time,
         }
-    
+
     def _evaluate_dataset(self, dataset: SFTEvalDataset, num_examples: int | None = None):
         total = len(dataset) if num_examples is None else min(num_examples, len(dataset))
-        
+
         rank = self.process_info["rank"]
         world_size = self.process_info["world_size"]
-        
+
         correct = 0
         count = 0
-        
+
         for idx in range(rank, total, world_size):
             conversation = dataset[idx]
             completion = self._generate_completion(conversation)
             if dataset.evaluate(conversation, completion):
                 correct += 1
             count += 1
-        
+
         if self.process_info["distributed"]:
             correct_tensor = torch.tensor(correct, dtype=torch.float32, device=self.device.device)
             count_tensor = torch.tensor(count, dtype=torch.float32, device=self.device.device)
@@ -406,27 +432,27 @@ class ChatCoreEvaluator(Evaluator):
             dist.all_reduce(count_tensor, op=dist.ReduceOp.SUM)
             correct = correct_tensor.item()
             count = count_tensor.item()
-        
+
         accuracy = correct / count if count > 0 else 0.0
         return {"accuracy": accuracy, "num_examples": int(count)}
-    
+
     def _generate_completion(self, conversation: dict) -> str:
         import copy
-        
+
         conversation = copy.deepcopy(conversation)
         messages = conversation["messages"]
         messages.pop()
-        
+
         # Reserve 1 token for assistant_start to stay within seq_length
         ids, _ = self.tokenizer.render_conversation(conversation, self.config.seq_length - 1)
-        
+
         assistant_start = self.tokenizer.encode_special("<|assistant_start|>")
         ids.append(assistant_start)
-        
+
         input_tensor = torch.tensor([ids], dtype=torch.long, device=self.device.device)
-        
+
         with torch.no_grad():
             logits = self.model(input_tensor)
             next_token = logits[0, -1, :].argmax().item()
-        
+
         return self.tokenizer.decode(torch.tensor([next_token]))[0]

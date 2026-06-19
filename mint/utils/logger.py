@@ -5,6 +5,7 @@ from loguru import logger
 
 from mint.config.base import Config
 
+
 logger.remove()
 
 logger.add(
