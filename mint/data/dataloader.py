@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Generator
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import torch
 
@@ -28,9 +29,10 @@ class DistributedDataloader(Sampler, ABC):
         batch_size: int,
         seq_len: int,
         tokenizer: Tokenizer,
-        *args,
-        **kwargs,
+        *args: Any,  # noqa: ANN401
+        **kwargs: Any,  # noqa: ANN401
     ) -> None:
+        super().__init__(*args, **kwargs)
         self.device = device
         self.data_dir = Path(data_dir)
         self.B = batch_size
