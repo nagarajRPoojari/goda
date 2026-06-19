@@ -1,5 +1,5 @@
 import json
-import os
+from pathlib import Path
 from typing import Any
 
 from mint.data.datasets.base import SFTTrainDataset
@@ -11,11 +11,11 @@ class CustomJSON(SFTTrainDataset):
         self.filepath = filepath
         self.conversations = []
 
-        if os.path.exists(filepath):
-            with open(filepath, encoding="utf-8") as f:
+        if Path.exists(filepath):
+            with Path.open(filepath, encoding="utf-8") as f:
                 for line in f:
-                    line = line.strip()
-                    if line:
+                    line_ = line.strip()
+                    if line_:
                         self.conversations.append(json.loads(line))
 
     def __len__(self) -> int:
