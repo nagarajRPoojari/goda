@@ -91,8 +91,6 @@ class SFTTrainer(BaseTrainer):
         logger.info("Starting SFT training from step 0")
 
     def _validate_batch(self, inputs: torch.Tensor, targets: torch.Tensor, step: int) -> None:
-        """Override to add NaN/Inf validation for SFT training."""
-        # Check for NaN/Inf in inputs before forward pass
         if torch.isnan(inputs).any():
             logger.error(f"NaN detected in inputs at step {step}")
         if torch.isinf(inputs).any():
@@ -101,7 +99,6 @@ class SFTTrainer(BaseTrainer):
     def _forward_pass(
         self, inputs: torch.Tensor, doc_ids: torch.Tensor | None = None
     ) -> torch.Tensor:
-        """Override to add NaN validation in logits."""
         logits = self.model(inputs)
 
         # Check for NaN in logits
@@ -191,12 +188,11 @@ class SFTTrainer(BaseTrainer):
                 )
 
                 if (step + 1) % self.config.eval_every_n_steps == 0 and step > 0:
-                    self._run_evaluation(step=step+1, num_examples=100)
-                    self._log_sample_predictions(step+1)
-                
-                
-                self._maybe_save_checkpoint(step+1, self.checkpointer)
-                self._log_training_progress(step+1, metrics)
+                    self._run_evaluation(step=step + 1, num_examples=100)
+                    self._log_sample_predictions(step + 1)
+
+                self._maybe_save_checkpoint(step + 1, self.checkpointer)
+                self._log_training_progress(step + 1, metrics)
 
                 accumulated_loss = 0.0
 
