@@ -32,7 +32,7 @@ class MetaConfig(Config):
     dl: DataloaderConfig
 
 
-def parse_dataset_spec(spec: str, dataset_map: dict):
+def parse_dataset_spec(spec: str, dataset_map: dict):  # noqa: ANN201
     if "*" in spec:
         count_str, name = spec.split("*", 1)
         count = int(count_str)
@@ -52,7 +52,7 @@ def parse_dataset_spec(spec: str, dataset_map: dict):
         return []
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(description="SFT training for Gemma model")
     parser.add_argument(
         "--config", type=str, default="config_d12.yaml", help="Path to config YAML file"
@@ -85,7 +85,7 @@ def main():
         logger.error(
             f"Config vocab_size ({config.model.vocab_size}) does not match tokenizer vocab_size ({tokenizer.vocab_size})"
         )
-        logger.error(f"Please update the config file to set vocab_size: {tokenizer.vocab_size}")
+        logger.error(f"Please update the config file to set vocab_size: {tokenizer.vocab_size}")  # noqa: S608
         raise ValueError(
             f"Vocab size mismatch: config={config.model.vocab_size}, tokenizer={tokenizer.vocab_size}"
         )
@@ -96,7 +96,7 @@ def main():
         "arc": lambda: ARC(subset="ARC-Challenge", split="train"),
         "mmlu": lambda: MMLU(subset="all", split="auxiliary_train"),
         "gsm8k": lambda: GSM8K(subset="main", split="train"),
-        "humaneval": lambda: HumanEval(),
+        "humaneval": HumanEval,
         "smoltalk": lambda: SmolTalk(split="train"),
         "spellingbee": lambda: SpellingBee(size=1000, split="train"),
         "simplespelling": lambda: SimpleSpelling(size=1000, split="train"),
@@ -110,7 +110,7 @@ def main():
         "arc": lambda: ARC(subset="ARC-Challenge", split="test"),
         "mmlu": lambda: MMLU(subset="all", split="test"),
         "gsm8k": lambda: GSM8K(subset="main", split="test"),
-        "humaneval": lambda: HumanEval(),
+        "humaneval": HumanEval,
         "spellingbee": lambda: SpellingBee(size=100, split="test"),
         "simplespelling": lambda: SimpleSpelling(size=100, split="test"),
     }
