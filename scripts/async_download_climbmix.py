@@ -27,9 +27,9 @@ except ImportError:
 
 
 class DownloadCoordinator:
-    """Shared state between download and training processes"""
+    """Shared state between download and training processes."""
 
-    def __init__(self, min_shards: int):
+    def __init__(self, min_shards: int) -> None:
         self.min_shards = min_shards
         self.downloaded_count = Value("i", 0)
         self.total_shards = Value("i", 0)

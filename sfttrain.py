@@ -4,7 +4,6 @@ from dataclasses import dataclass
 import torch
 from torch import nn
 
-from goda.logger import logger
 from mint.config.base import Config
 from mint.data.dataloader import DataloaderConfig
 from mint.data.datasets.arc import ARC
@@ -21,6 +20,7 @@ from mint.optim.muon_adamw import MuonAdamWConfig
 from mint.tokenizer import Tokenizer
 from mint.trainer.sft import SFTConfig, SFTTrainer
 from mint.utils.device import Device, DeviceConfig
+from mint.utils.logger import logger
 
 
 @dataclass

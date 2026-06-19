@@ -39,7 +39,7 @@ POLAR_EXPRESS_COEFFS = [
 
 
 class MuonAdamW(Optimizer):
-    def __init__(self, param_groups: list[dict]):
+    def __init__(self, param_groups: list[dict]) -> None:
         super().__init__(param_groups, defaults={})
 
         self._adamw_step_t = torch.tensor(0.0, dtype=torch.float32, device="cpu")
@@ -204,9 +204,7 @@ class MuonAdamW(Optimizer):
             if "momentum_buffer" not in state:
                 state["momentum_buffer"] = torch.zeros_like(p)
             if "second_momentum_buffer" not in state:
-                state_shape = (
-                    (shape[-2], 1) if shape[-2] >= shape[-1] else (1, shape[-1])
-                )
+                state_shape = (shape[-2], 1) if shape[-2] >= shape[-1] else (1, shape[-1])
                 state["second_momentum_buffer"] = torch.zeros(
                     state_shape, dtype=torch.float32, device=p.device
                 )

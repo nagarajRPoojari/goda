@@ -19,12 +19,12 @@ class EvalConfig(Config):
 
 
 class Evaluator(ABC):
-    def __init__(self, model: nn.Module, config: EvalConfig, device: Device):
+    def __init__(self, model: nn.Module, config: EvalConfig, device: Device) -> None:
         self.model = model
         self.config = config
         self.device = device
         self.process_info = device.process_info()
 
     @abstractmethod
-    def evaluate(self, *args, **kwargs) -> dict[str, Any]:
+    def evaluate(self, *args, **kwargs) -> dict[str, Any]:  # noqa: ANN002, ANN003
         pass

@@ -80,9 +80,7 @@ def main():
     )
 
     # Training arguments
-    parser.add_argument(
-        "--train-script", type=str, required=True, help="Path to training script"
-    )
+    parser.add_argument("--train-script", type=str, required=True, help="Path to training script")
     parser.add_argument(
         "--use-torchrun", action="store_true", help="Use torchrun instead of python"
     )
@@ -92,9 +90,7 @@ def main():
         default="",
         help="Arguments for torchrun (e.g., '--nproc_per_node=2')",
     )
-    parser.add_argument(
-        "--train-args", type=str, default="", help="Arguments for training script"
-    )
+    parser.add_argument("--train-args", type=str, default="", help="Arguments for training script")
 
     parser.add_argument(
         "--skip-download",

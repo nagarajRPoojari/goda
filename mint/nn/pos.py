@@ -6,7 +6,7 @@ from torch import nn
 
 
 class PosEmbeddings(nn.Module, ABC):
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
 
     @abstractmethod
@@ -16,7 +16,7 @@ class PosEmbeddings(nn.Module, ABC):
 
 
 class SinusoidalPosEmbeddings(PosEmbeddings):
-    def __init__(self, seq_len: int, head_dim: int, base: float = 10000.0):
+    def __init__(self, seq_len: int, head_dim: int, base: float = 10000.0) -> None:
         super().__init__()
         self.head_dim = head_dim
 
@@ -24,8 +24,7 @@ class SinusoidalPosEmbeddings(PosEmbeddings):
 
         position = torch.arange(0, seq_len, dtype=torch.float32).unsqueeze(1)
         div_term = torch.exp(
-            torch.arange(0, head_dim, 2, dtype=torch.float32)
-            * -(math.log(base) / head_dim)
+            torch.arange(0, head_dim, 2, dtype=torch.float32) * -(math.log(base) / head_dim)
         )
 
         pe[:, 0::2] = torch.sin(position * div_term)
@@ -56,7 +55,7 @@ class RoPE(PosEmbeddings):
         head_dim: int,
         rope_base_theta: int = 100000,
         dtype: torch.dtype = torch.float32,
-    ):
+    ) -> None:
         super().__init__()
 
         cos, sin = self._precompute_rotary_embeddings(
@@ -74,9 +73,9 @@ class RoPE(PosEmbeddings):
         seq_len: int,
         head_dim: int,
         base: int,
-        device=None,
+        device: torch.device = None,
         dtype: torch.dtype = torch.float32,
-    ):
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         channel_range = torch.arange(0, head_dim, 2, dtype=torch.float32)
         inv_freq = 1.0 / (base ** (channel_range / head_dim))
 
@@ -88,7 +87,9 @@ class RoPE(PosEmbeddings):
         cos, sin = cos[None, :, None, :], sin[None, :, None, :]
         return cos, sin
 
-    def _apply_rotary_embs(self, x: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor):
+    def _apply_rotary_embs(
+        self, x: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor
+    ) -> torch.Tensor:
         d = x.shape[-1] // 2
         x1, x2 = x[..., :d], x[..., d:]
 
@@ -119,7 +120,7 @@ class LinearScaledRoPE(RoPE):
         scale_factor: float = 4.0,
         rope_base_theta: int = 100000,
         dtype: torch.dtype = torch.float32,
-    ):
+    ) -> None:
         self.scale_factor = scale_factor
         super().__init__(seq_len, head_dim, rope_base_theta, dtype)
 
@@ -128,9 +129,9 @@ class LinearScaledRoPE(RoPE):
         seq_len: int,
         head_dim: int,
         base: int,
-        device=None,
+        device: torch.device = None,
         dtype: torch.dtype = torch.float32,
-    ):
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         channel_range = torch.arange(0, head_dim, 2, dtype=torch.float32)
         inv_freq = 1.0 / (base ** (channel_range / head_dim))
 
@@ -138,10 +139,7 @@ class LinearScaledRoPE(RoPE):
         # why ?: imagine initially model is trained on seq_len=512 with RoPE, now
         # i want to train for 4k, model struggles to understand fequencies of pos beyond 512.
         # we can scale down those pos to smaller interpolated values
-        t = (
-            torch.arange(seq_len, dtype=torch.float32, device=device)
-            / self.scale_factor
-        )
+        t = torch.arange(seq_len, dtype=torch.float32, device=device) / self.scale_factor
         freqs = torch.outer(t, inv_freq)
 
         cos, sin = freqs.cos(), freqs.sin()
@@ -151,7 +149,7 @@ class LinearScaledRoPE(RoPE):
 
 
 class NoPE(PosEmbeddings):
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
 
     @abstractmethod
@@ -162,16 +160,16 @@ class NoPE(PosEmbeddings):
 
 
 class ALiBiPositionalBias(PosEmbeddings):
-    def __init__(self, n_heads: int):
+    def __init__(self, n_heads: int) -> None:
         super().__init__()
         self.n_heads = n_heads
         slopes = torch.tensor(self._get_slopes(n_heads))
 
-        # Shape: [1, n_heads, 1, 1]
+        # .  Shape: [1, n_heads, 1, 1]
         self.register_buffer("slopes", slopes[None, :, None, None], persistent=False)
 
-    def _get_slopes(self, n_heads: int):
-        def get_slopes_power_of_2(n_heads):
+    def _get_slopes(self, n_heads: int):  # noqa: ANN202
+        def get_slopes_power_of_2(n_heads: int) -> list:
             start = 2 ** (-(2 ** -(math.log2(n_heads) - 3)))
             ratio = start
             return [start * (ratio**i) for i in range(n_heads)]
@@ -182,9 +180,7 @@ class ALiBiPositionalBias(PosEmbeddings):
         closest_power_of_2 = 2 ** math.floor(math.log2(n_heads))
         return (
             get_slopes_power_of_2(closest_power_of_2)
-            + self._get_slopes(2 * closest_power_of_2)[0::2][
-                : n_heads - closest_power_of_2
-            ]
+            + self._get_slopes(2 * closest_power_of_2)[0::2][: n_heads - closest_power_of_2]
         )
 
     def forward(

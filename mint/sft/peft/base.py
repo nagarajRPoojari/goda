@@ -4,9 +4,10 @@ from torch import nn
 
 
 class Adapter(ABC):
-    def __init__(self):
+    @abstractmethod
+    def __init__(self) -> None:
         pass
 
     @abstractmethod
-    def apply(self, model: nn.Module, **kwargs):
+    def apply(self, model: nn.Module, **kwargs) -> None:  # noqa: ANN003
         pass

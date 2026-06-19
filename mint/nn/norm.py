@@ -8,13 +8,13 @@ class Norm(nn.Module, ABC): ...
 
 
 class RMSNorm(nn.Module):
-    def __init__(self, emb_dim, eps=1e-6, bias=False):
+    def __init__(self, emb_dim: int, eps: float = 1e-6, *, bias: bool = False) -> None:
         super().__init__()
         self.eps = eps
         self.scale = nn.Parameter(torch.zeros(emb_dim))
         self.shift = nn.Parameter(torch.zeros(emb_dim)) if bias else None
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor):  # noqa: ANN201
         input_dtype = x.dtype
         x_f = x.float()
         var = x_f.pow(2).mean(dim=-1, keepdim=True)

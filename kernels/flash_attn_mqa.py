@@ -121,12 +121,8 @@ def _attn_backward_dK_dV(
         offset_Q_T = curr_offset_Q_T + tl.arange(0, BLOCK_SIZE_Q)
 
         # 2. Dynamic pointer generation
-        block_Qt_ptr = (
-            Q + offset_Q_T[None, :] * stride_seq + offset_D[:, None] * stride_dim
-        )
-        block_dO_ptr = (
-            dO + offset_Q_T[:, None] * stride_seq + offset_D[None, :] * stride_dim
-        )
+        block_Qt_ptr = Q + offset_Q_T[None, :] * stride_seq + offset_D[:, None] * stride_dim
+        block_dO_ptr = dO + offset_Q_T[:, None] * stride_seq + offset_D[None, :] * stride_dim
 
         # 3. Load regular tensors
         block_Qt = tl.load(block_Qt_ptr)
@@ -148,14 +144,10 @@ def _attn_backward_dK_dV(
 
         # 5. Accumulate dV
         block_Pt_fp16 = block_Pt.to(tl.float16)
-        block_dV = (
-            block_dV + tl.dot(block_Pt_fp16, block_dO, out_dtype=tl.float32)
-        ).to(tl.float32)
+        block_dV = (block_dV + tl.dot(block_Pt_fp16, block_dO, out_dtype=tl.float32)).to(tl.float32)
 
         # 6. dP^T = V * dO^T
-        block_dPt = tl.dot(block_V, tl.trans(block_dO), out_dtype=tl.float32).to(
-            tl.float32
-        )
+        block_dPt = tl.dot(block_V, tl.trans(block_dO), out_dtype=tl.float32).to(tl.float32)
 
         # 7. dS^T = P^T * (dP^T - D)
         block_dSt = (block_Pt * (block_dPt - block_D[None, :])).to(tl.float32)
@@ -163,22 +155,17 @@ def _attn_backward_dK_dV(
 
         # 8. Accumulate dK — tau factor because score = tau * Q @ K^T, so dK = tau * dS^T @ Q
         block_dK = (
-            block_dK
-            + tau * tl.dot(block_dSt_fp16, tl.trans(block_Qt), out_dtype=tl.float32)
+            block_dK + tau * tl.dot(block_dSt_fp16, tl.trans(block_Qt), out_dtype=tl.float32)
         ).to(tl.float32)
 
         # 9. Step loop offset forward
         curr_offset_Q_T += BLOCK_SIZE_Q
 
     # SMEM to GMEM after full accumulation
-    block_dV_ptr = (
-        dV + offset_KV_T[:, None] * stride_seq + offset_D[None, :] * stride_dim
-    )
+    block_dV_ptr = dV + offset_KV_T[:, None] * stride_seq + offset_D[None, :] * stride_dim
     tl.store(block_dV_ptr, block_dV)
 
-    block_dK_ptr = (
-        dK + offset_KV_T[:, None] * stride_seq + offset_D[None, :] * stride_dim
-    )
+    block_dK_ptr = dK + offset_KV_T[:, None] * stride_seq + offset_D[None, :] * stride_dim
     tl.store(block_dK_ptr, block_dK)
 
 
@@ -230,13 +217,9 @@ def _attn_backward_dQ(
     start_q = index_KV_block * BLOCK_SIZE_Q
     offset_Q_T = start_q + tl.arange(0, BLOCK_SIZE_Q)
 
-    block_Q = tl.load(
-        Q + offset_Q_T[:, None] * stride_seq + offset_D[None, :] * stride_dim
-    )
+    block_Q = tl.load(Q + offset_Q_T[:, None] * stride_seq + offset_D[None, :] * stride_dim)
     block_dQ = tl.zeros([BLOCK_SIZE_Q, HEAD_DIM], dtype=tl.float32)
-    block_dO = tl.load(
-        dO + offset_Q_T[:, None] * stride_seq + offset_D[None, :] * stride_dim
-    )
+    block_dO = tl.load(dO + offset_Q_T[:, None] * stride_seq + offset_D[None, :] * stride_dim)
 
     block_M = tl.load(M + offset_Q_T)
     block_M = block_M[:, None]
@@ -247,34 +230,24 @@ def _attn_backward_dQ(
     # So dQ[q] only accumulates from KV blocks where min(k) <= max(q).
     # => only loop KV blocks up to and including the one containing start_q.
     if STAGE == 3:
-        kv_end = (
-            start_q + BLOCK_SIZE_Q
-        )  # KV positions > start_q+BLOCK_SIZE_Q-1 are masked out
+        kv_end = start_q + BLOCK_SIZE_Q  # KV positions > start_q+BLOCK_SIZE_Q-1 are masked out
     else:
         kv_end = SEQ_LEN
 
     curr_offset_KV_T = 0
 
     block_Kt_ptr = (
-        K
-        + tl.arange(0, BLOCK_SIZE_KV)[None, :] * stride_seq
-        + offset_D[:, None] * stride_dim
+        K + tl.arange(0, BLOCK_SIZE_KV)[None, :] * stride_seq + offset_D[:, None] * stride_dim
     )
     block_Vt_ptr = (
-        V
-        + tl.arange(0, BLOCK_SIZE_KV)[None, :] * stride_seq
-        + offset_D[:, None] * stride_dim
+        V + tl.arange(0, BLOCK_SIZE_KV)[None, :] * stride_seq + offset_D[:, None] * stride_dim
     )
 
     for kv_i in range(kv_end // BLOCK_SIZE_KV):
         offset_KV_T = curr_offset_KV_T + tl.arange(0, BLOCK_SIZE_KV)
 
-        block_Kt_ptr = (
-            K + offset_KV_T[None, :] * stride_seq + offset_D[:, None] * stride_dim
-        )
-        block_Vt_ptr = (
-            V + offset_KV_T[None, :] * stride_seq + offset_D[:, None] * stride_dim
-        )
+        block_Kt_ptr = K + offset_KV_T[None, :] * stride_seq + offset_D[:, None] * stride_dim
+        block_Vt_ptr = V + offset_KV_T[None, :] * stride_seq + offset_D[:, None] * stride_dim
 
         block_Kt = tl.load(block_Kt_ptr)
         block_Vt = tl.load(block_Vt_ptr)
@@ -296,9 +269,7 @@ def _attn_backward_dQ(
 
         curr_offset_KV_T += BLOCK_SIZE_KV
 
-    block_dQ_ptr = (
-        dQ + offset_Q_T[:, None] * stride_seq + offset_D[None, :] * stride_dim
-    )
+    block_dQ_ptr = dQ + offset_Q_T[:, None] * stride_seq + offset_D[None, :] * stride_dim
     tl.store(block_dQ_ptr, block_dQ)
 
 
@@ -354,9 +325,9 @@ def _attn_forward_internal(
         alpha = tl.exp(m_i - m_ij).to(tl.float32)
         block_P = block_P.to(tl.float16)
         l_i = (l_i * alpha + l_ij).to(tl.float32)
-        block_O = (
-            block_O * alpha[:, None] + tl.dot(block_P, block_V, out_dtype=tl.float32)
-        ).to(tl.float32)
+        block_O = (block_O * alpha[:, None] + tl.dot(block_P, block_V, out_dtype=tl.float32)).to(
+            tl.float32
+        )
         m_i = m_ij.to(tl.float32)
 
         block_K_ptr = tl.advance(block_K_ptr, (0, BLOCK_SIZE_KV))
@@ -403,9 +374,7 @@ def _attn_forward_kernel(
     index_Q_batch = index_Q_batch_head // NUM_HEADS
     index_Q_head = index_Q_batch_head % NUM_HEADS
 
-    offset_QKV_T = (
-        index_Q_batch.to(tl.int64) * stride_Q_B + index_Q_head.to(tl.int64) * stride_Q_H
-    )
+    offset_QKV_T = index_Q_batch.to(tl.int64) * stride_Q_B + index_Q_head.to(tl.int64) * stride_Q_H
 
     block_Q_ptr = tl.make_block_ptr(
         base=Q + offset_QKV_T,
@@ -496,7 +465,7 @@ def _attn_forward_kernel(
     tl.store(block_O_ptr, block_O.to(O.type.element_ty))
 
 
-class FlashAttention(torch.autograd.Function):
+class FlashAttentionKernel(torch.autograd.Function):
     @staticmethod
     def forward(ctx, Q, K, V, causal, tau) -> torch.Tensor:
         HEAD_DIM_Q, HEAD_DIM_K, HEAD_DIM_V = Q.shape[-1], K.shape[-1], V.shape[-1]
@@ -513,9 +482,7 @@ class FlashAttention(torch.autograd.Function):
 
         grid = (triton.cdiv(SEQ_LEN, BLOCK_SIZE_Q), BATCH_SIZE * NUM_HEADS)
 
-        M = torch.empty(
-            (BATCH_SIZE, NUM_HEADS, SEQ_LEN), device=Q.device, dtype=torch.float32
-        )
+        M = torch.empty((BATCH_SIZE, NUM_HEADS, SEQ_LEN), device=Q.device, dtype=torch.float32)
 
         _attn_forward_kernel[grid](  # type: ignore
             Q=Q,
@@ -645,23 +612,17 @@ class FlashAttention(torch.autograd.Function):
 
 def test_op(BATCH_SIZE, NUM_HEADS, SEQ_LEN, HEAD_DIM, causal, dtype=torch.float16):
     Q = (
-        torch.empty(
-            (BATCH_SIZE, NUM_HEADS, SEQ_LEN, HEAD_DIM), dtype=dtype, device="cuda"
-        )
+        torch.empty((BATCH_SIZE, NUM_HEADS, SEQ_LEN, HEAD_DIM), dtype=dtype, device="cuda")
         .normal_(mean=0.0, std=0.5)
         .requires_grad_()
     )
     K = (
-        torch.empty(
-            (BATCH_SIZE, NUM_HEADS, SEQ_LEN, HEAD_DIM), dtype=dtype, device="cuda"
-        )
+        torch.empty((BATCH_SIZE, NUM_HEADS, SEQ_LEN, HEAD_DIM), dtype=dtype, device="cuda")
         .normal_(mean=0.0, std=0.5)
         .requires_grad_()
     )
     V = (
-        torch.empty(
-            (BATCH_SIZE, NUM_HEADS, SEQ_LEN, HEAD_DIM), dtype=dtype, device="cuda"
-        )
+        torch.empty((BATCH_SIZE, NUM_HEADS, SEQ_LEN, HEAD_DIM), dtype=dtype, device="cuda")
         .normal_(mean=0.0, std=0.5)
         .requires_grad_()
     )
@@ -676,9 +637,7 @@ def test_op(BATCH_SIZE, NUM_HEADS, SEQ_LEN, HEAD_DIM, causal, dtype=torch.float1
     skip_ref = attn_matrix_gb > free_gb * 0.5  # leave headroom for grads
 
     if skip_ref:
-        print(
-            f"  [skip reference: attn matrix ~{attn_matrix_gb:.1f}GB, free ~{free_gb:.1f}GB]"
-        )
+        print(f"  [skip reference: attn matrix ~{attn_matrix_gb:.1f}GB, free ~{free_gb:.1f}GB]")
     else:
         MASK = torch.tril(torch.ones((SEQ_LEN, SEQ_LEN), device="cuda"))
         P = torch.matmul(Q, K.transpose(2, 3)) * softmax_scale
@@ -691,7 +650,7 @@ def test_op(BATCH_SIZE, NUM_HEADS, SEQ_LEN, HEAD_DIM, causal, dtype=torch.float1
         ref_dK, K.grad = K.grad.clone(), None  # type: ignore
         ref_dQ, Q.grad = Q.grad.clone(), None  # type: ignore
 
-        tri_out = FlashAttention.apply(Q, K, V, causal, softmax_scale).half()
+        tri_out = FlashAttentionKernel.apply(Q, K, V, causal, softmax_scale).half()
         tri_out.backward(dO)
         tri_dV, V.grad = V.grad.clone(), None  # type: ignore
         tri_dK, K.grad = K.grad.clone(), None  # type: ignore
@@ -706,7 +665,7 @@ def test_op(BATCH_SIZE, NUM_HEADS, SEQ_LEN, HEAD_DIM, causal, dtype=torch.float1
 
     # Benchmark (always runs)
     ms = triton.testing.do_bench(
-        lambda: FlashAttention.apply(Q, K, V, causal, softmax_scale).half().backward(dO)
+        lambda: FlashAttentionKernel.apply(Q, K, V, causal, softmax_scale).half().backward(dO)
     )
 
     flops = 2.5 * 4 * BATCH_SIZE * NUM_HEADS * SEQ_LEN * SEQ_LEN * HEAD_DIM

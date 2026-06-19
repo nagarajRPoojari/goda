@@ -80,6 +80,7 @@ ignore = [
     "PLR2004",  # Magic value used in comparison
     "T201",     # print found (allow for debugging)
     "TRY003",   # Avoid specifying long messages outside exception class
+    "N806",
 ]
 
 [tool.ruff.lint.per-file-ignores]

@@ -1,6 +1,8 @@
 import math
 from dataclasses import dataclass
 
+import torch
+
 from mint.config.base import Config
 
 
@@ -33,7 +35,7 @@ class Scheduler:
         self,
         num_iterations: int,
         config: SchedulerConfig,
-    ):
+    ) -> None:
         self.num_iterations = num_iterations
         self.warmup_steps = config.warmup_steps
         self.warmdown_iters = round(config.warmdown_ratio * num_iterations)
@@ -58,25 +60,16 @@ class Scheduler:
     def get_muon_momentum(self, step: int) -> float:
         if step < self.muon_momentum_warmup_steps:
             frac = step / self.muon_momentum_warmup_steps
-            return (
-                1 - frac
-            ) * self.muon_momentum_start + frac * self.muon_momentum_peak
+            return (1 - frac) * self.muon_momentum_start + frac * self.muon_momentum_peak
         if step >= self.warmdown_start:
             progress = (step - self.warmdown_start) / self.warmdown_iters
-            return (
-                self.muon_momentum_peak * (1 - progress)
-                + self.muon_momentum_final * progress
-            )
+            return self.muon_momentum_peak * (1 - progress) + self.muon_momentum_final * progress
         return self.muon_momentum_peak
 
     def get_weight_decay(self, step: int) -> float:
-        return (
-            self.weight_decay
-            * 0.5
-            * (1 + math.cos(math.pi * step / self.num_iterations))
-        )
+        return self.weight_decay * 0.5 * (1 + math.cos(math.pi * step / self.num_iterations))
 
-    def step(self, optimizer, step: int) -> dict:
+    def step(self, optimizer: torch.optim.Optimizer, step: int) -> dict:
         lrm = self.get_lr_multiplier(step)
         muon_momentum = self.get_muon_momentum(step)
         muon_weight_decay = self.get_weight_decay(step)

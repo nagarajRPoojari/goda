@@ -2,19 +2,20 @@ import os
 from typing import Any
 
 import torch
-import torch.nn.functional as F
+import torch.nn.functional as F  # noqa: N812
 from torch import nn
 
+from kernels.flash_attn_mqa import (
+    FlashAttentionKernel,  # pyright: ignore[reportMissingImports]
+)
 from mint.kvcache.base import KVCache
 
 
 class FlashAttention(nn.Module):
-    def __init__(self, use_custom_fa: bool = True):
+    def __init__(self, *, use_custom_fa: bool = True) -> None:
         super().__init__()
         self.use_custom_fa = use_custom_fa
-        self._custom_fa: Any | None = (
-            self._load_custom_flash_attention() if use_custom_fa else None
-        )
+        self._custom_fa: Any | None = self._load_custom_flash_attention() if use_custom_fa else None
         self._fa3: Any | None = self._load_flash_attention_3()
 
     def forward(
@@ -22,6 +23,7 @@ class FlashAttention(nn.Module):
         q: torch.Tensor,
         k: torch.Tensor,
         v: torch.Tensor,
+        *,
         causal: bool = False,
         window_size: tuple[int, int] = (-1, -1),
         kv_cache: KVCache | None = None,
@@ -50,19 +52,15 @@ class FlashAttention(nn.Module):
             doc_ids=doc_ids,
         )
 
-    def _load_custom_flash_attention(self):
+    def _load_custom_flash_attention(self) -> Any:  # noqa: ANN401
         if not torch.cuda.is_available():
             return None
         try:
-            from kernels.flash_attn_mqa import (
-                FlashAttention,  # pyright: ignore[reportMissingImports]
-            )
-
-            return FlashAttention
+            return FlashAttentionKernel
         except Exception:
             return None
 
-    def _load_flash_attention_3(self):
+    def _load_flash_attention_3(self):  # noqa: ANN202
         if not torch.cuda.is_available():
             return None
         try:
@@ -70,7 +68,7 @@ class FlashAttention(nn.Module):
             if major != 9:
                 return None
             os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] = "1"
-            from kernels import get_kernel  # pyright: ignore[reportMissingImports]
+            from kernels import get_kernel  # pyright: ignore[reportMissingImports]  # noqa: PLC0415
 
             return get_kernel("varunneal/flash-attention-3").flash_attn_interface
         except Exception:
@@ -78,9 +76,7 @@ class FlashAttention(nn.Module):
 
     def _use_custom_fa(self, q: torch.Tensor) -> bool:
         return (
-            self._custom_fa is not None
-            and q.is_cuda
-            and q.dtype in [torch.float16, torch.bfloat16]
+            self._custom_fa is not None and q.is_cuda and q.dtype in [torch.float16, torch.bfloat16]
         )
 
     def _use_fa3(self, q: torch.Tensor) -> bool:
@@ -91,6 +87,7 @@ class FlashAttention(nn.Module):
         q: torch.Tensor,
         k: torch.Tensor,
         v: torch.Tensor,
+        *,
         causal: bool,
         window_size: tuple[int, int],
         base_attn_mask: torch.Tensor = None,
@@ -98,7 +95,7 @@ class FlashAttention(nn.Module):
     ) -> torch.Tensor:
         if doc_ids is not None:
             try:
-                from flash_attn import flash_attn_varlen_func
+                from flash_attn import flash_attn_varlen_func  # type: ignore # noqa: PLC0415
 
                 B, T, H, D = q.shape
                 _, _, H_k, _ = k.shape
@@ -137,11 +134,7 @@ class FlashAttention(nn.Module):
                 # Fall through to SDPA if flash_attn is not installed
                 pass
 
-        if (
-            self._use_custom_fa(q)
-            and window_size == (-1, -1)
-            and q.shape[2] == k.shape[2]
-        ):
+        if self._use_custom_fa(q) and window_size == (-1, -1) and q.shape[2] == k.shape[2]:
             custom_fa = self._custom_fa
             assert custom_fa is not None
             head_dim = q.shape[-1]
@@ -182,6 +175,7 @@ class FlashAttention(nn.Module):
         k: torch.Tensor,
         v: torch.Tensor,
         kv_cache: KVCache,
+        *,
         causal: bool,
         window_size: tuple[int, int],
         base_attn_mask: torch.Tensor = None,
@@ -227,6 +221,7 @@ class FlashAttention(nn.Module):
         q: torch.Tensor,
         k: torch.Tensor,
         v: torch.Tensor,
+        *,
         causal: bool,
         window_size: tuple[int, int],
         enable_gqa: bool,
@@ -240,9 +235,7 @@ class FlashAttention(nn.Module):
         mask = None
         if doc_ids is not None:
             # Shape: (B, 1, T, 1) == (B, 1, 1, T) -> Broadcasts to (B, 1, T, T)
-            mask = doc_ids.unsqueeze(1).unsqueeze(-1) == doc_ids.unsqueeze(1).unsqueeze(
-                -2
-            )
+            mask = doc_ids.unsqueeze(1).unsqueeze(-1) == doc_ids.unsqueeze(1).unsqueeze(-2)
 
         if base_attn_mask is not None:
             mask = base_attn_mask if mask is None else (mask & base_attn_mask)
@@ -266,9 +259,7 @@ class FlashAttention(nn.Module):
                 start = max(0, k_len - (left_window + 1))
                 k = k[:, :, start:, :]
                 v = v[:, :, start:, :]
-            return F.scaled_dot_product_attention(
-                q, k, v, attn_mask=mask, enable_gqa=enable_gqa
-            )
+            return F.scaled_dot_product_attention(q, k, v, attn_mask=mask, enable_gqa=enable_gqa)
 
         return F.scaled_dot_product_attention(
             q,

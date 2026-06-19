@@ -1,5 +1,5 @@
 import copy
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any
 
 import tiktoken
 import torch
@@ -26,6 +26,7 @@ class Tokenizer:
     def encode(
         self,
         batch: list[str],
+        *,
         add_bos: bool = True,
         add_eos: bool = False,
         padding: bool = True,
@@ -45,6 +46,7 @@ class Tokenizer:
     def encode_to_list(
         self,
         batch: list[str],
+        *,
         add_bos: bool = True,
         add_eos: bool = False,
         padding: bool = True,
@@ -61,23 +63,18 @@ class Tokenizer:
                 tokens = tokens[:available]
 
             if add_bos:
-                tokens = [self.bos_token] + tokens
+                tokens = [self.bos_token, *tokens]
             if add_eos:
-                tokens = tokens + [self.eos_token]
+                tokens = [*tokens, self.eos_token]
 
             processed.append(tokens)
 
         if padding:
             max_len = max(len(seq) for seq in processed)
-            padded = [
-                seq + [self.pad_token] * (max_len - len(seq)) for seq in processed
-            ]
-            return padded
-        return [seq for seq in processed]
+            return [seq + [self.pad_token] * (max_len - len(seq)) for seq in processed]
+        return list(processed)
 
-    def decode(
-        self, batch: torch.Tensor, skip_special_tokens: bool = True
-    ) -> list[str]:
+    def decode(self, batch: torch.Tensor, *, skip_special_tokens: bool = True) -> list[str]:
         if batch.dim() == 1:
             batch = batch.unsqueeze(0)
 
@@ -101,7 +98,7 @@ class Tokenizer:
     ) -> tuple[list[int], list[int]]:
         ids, mask = [], []
 
-        def add_tokens(token_ids: int | list[int], mask_val: int):
+        def add_tokens(token_ids: int | list[int], mask_val: int) -> None:
             if isinstance(token_ids, int):
                 token_ids = [token_ids]
             ids.extend(token_ids)
@@ -111,9 +108,7 @@ class Tokenizer:
         if messages[0]["role"] == "system":
             conversation = copy.deepcopy(conversation)
             messages = conversation["messages"]
-            messages[1]["content"] = (
-                messages[0]["content"] + "\n\n" + messages[1]["content"]
-            )
+            messages[1]["content"] = messages[0]["content"] + "\n\n" + messages[1]["content"]
             messages = messages[1:]
 
         user_start = self.encode_special("<|user_start|>")
@@ -127,7 +122,7 @@ class Tokenizer:
 
         add_tokens(self.bos_token, 0)
 
-        for i, message in enumerate(messages):
+        for _i, message in enumerate(messages):
             content = message["content"]
 
             if message["role"] == "user":
