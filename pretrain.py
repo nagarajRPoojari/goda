@@ -59,7 +59,7 @@ def main():
             f"Vocab size mismatch: config={config.model.vocab_size}, tokenizer={tokenizer.vocab_size}"
         )
 
-    device = Device(config)
+    device = Device(config.device)
 
     model: nn.Module
     if config.train.use_meta_device:
