@@ -22,7 +22,7 @@ class CheckpointerConfig(Config):
 
 
 class Checkpointer:
-    def __init__(self, config: CheckpointerConfig, is_main_process: bool) -> None:
+    def __init__(self, config: CheckpointerConfig, *, is_main_process: bool) -> None:
 
         self.checkpoint_dir = Path(config.checkpoint_dir)
         self.save_every_n_steps = config.save_checkpoint_every_n_steps

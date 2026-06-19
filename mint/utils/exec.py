@@ -16,7 +16,7 @@ class TimeoutHandlerError(Exception):
     pass
 
 
-def timeout_handler(signum, frame) -> Never:
+def timeout_handler(signum, frame) -> Never:  # noqa: ANN001, ARG001
     raise TimeoutHandlerError("Code execution timed out")
 
 
