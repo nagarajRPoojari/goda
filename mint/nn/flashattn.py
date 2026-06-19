@@ -4,7 +4,6 @@ from typing import Any
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
 from mint.kvcache.base import KVCache
 
 
@@ -138,17 +137,20 @@ class FlashAttention(nn.Module):
                 pass
 
         if (
-            doc_ids is None
-            and self.use_custom_fa
-            and self._use_custom_fa(q)
+            self._use_custom_fa(q)
             and window_size == (-1, -1)
-            and q.shape[1] == k.shape[1]  # doesn't support GQA yet
+            and q.shape[2] == k.shape[2]
         ):
             custom_fa = self._custom_fa
             assert custom_fa is not None
             head_dim = q.shape[-1]
             tau = 1.0 / (head_dim**0.5)
-            return custom_fa.apply(q, k, v, causal, tau)
+            # kernel expects [B, H, T, D]; make contiguous so strides are standard
+            q_ = q.transpose(1, 2).contiguous()
+            k_ = k.transpose(1, 2).contiguous()
+            v_ = v.transpose(1, 2).contiguous()
+            out = custom_fa.apply(q_, k_, v_, causal, tau)  # [B, H, T, D]
+            return out.transpose(1, 2)  # [B, T, H, D]
 
         if doc_ids is None and self._use_fa3(q):
             fa3 = self._fa3
