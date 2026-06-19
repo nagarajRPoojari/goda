@@ -5,7 +5,9 @@ from typing import Any
 
 import torch
 import torch.distributed as dist
-import torch.nn as nn
+from torch import nn
+from torch.optim import Optimizer
+
 from mint.config.base import Config
 from mint.data.dataloader import DistributedDataloader
 from mint.eval.base import EvalConfig, Evaluator
@@ -15,7 +17,6 @@ from mint.trainer.scheduler import Scheduler, SchedulerConfig
 from mint.utils.checkpointer import Checkpointer, CheckpointerConfig
 from mint.utils.device import Device
 from mint.utils.logger import LoggerConfig, logger
-from torch.optim import Optimizer
 
 
 @dataclass
@@ -93,9 +94,7 @@ class PreTrainer:
             return None
 
         if importlib.util.find_spec("wandb") is None:
-            raise ImportError(
-                "wandb is enabled in config but the package is not installed."
-            )
+            raise ImportError("wandb is enabled in config but the package is not installed.")
 
         wandb = __import__("wandb")
 
@@ -108,9 +107,7 @@ class PreTrainer:
                 for key, value in self.config.__dict__.items()
             },
         )
-        logger.info(
-            f"W&B initialized | project={self.config.lg.wandb_project} | run={run.name}"
-        )
+        logger.info(f"W&B initialized | project={self.config.lg.wandb_project} | run={run.name}")
         return run
 
     def _resume_from_checkpoint(self):
@@ -150,13 +147,9 @@ class PreTrainer:
             return local_state
 
         if self.is_main_process:
-            gathered_states: list[dict] = [
-                {} for _ in range(self.process_info["world_size"])
-            ]
+            gathered_states: list[dict] = [{} for _ in range(self.process_info["world_size"])]
             dist.gather_object(local_state, gathered_states, dst=0)
-            return {
-                "per_rank": {rank: state for rank, state in enumerate(gathered_states)}
-            }
+            return {"per_rank": {rank: state for rank, state in enumerate(gathered_states)}}
 
         dist.gather_object(local_state, None, dst=0)
         return {}
@@ -201,9 +194,7 @@ class PreTrainer:
             flatten(f"{metric_prefix}/{key}", value)
 
         if self.is_main_process:
-            log_items = " | ".join(
-                f"{key}={value:.4f}" for key, value in metrics.items()
-            )
+            log_items = " | ".join(f"{key}={value:.4f}" for key, value in metrics.items())
             logger.info(f"Eval complete | step={step} | {log_items}")
 
         self._log_wandb(metrics, step=step)
@@ -234,9 +225,7 @@ class PreTrainer:
         # Don't use enumerate with start parameter - it causes step/micro_step mismatch
         # Instead, manually track the step counter
         step = self.start_step
-        batch_iterator = self.dataloader.batch_loader(
-            split="train", resume_state=resume_state
-        )
+        batch_iterator = self.dataloader.batch_loader(split="train", resume_state=resume_state)
 
         step_start_time = time.perf_counter()
 
@@ -260,9 +249,7 @@ class PreTrainer:
             if micro_step % self.config.gradient_accumulation_steps == 0:
                 step_start_time = time.perf_counter()
 
-            is_accumulating = (
-                micro_step + 1
-            ) % self.config.gradient_accumulation_steps != 0
+            is_accumulating = (micro_step + 1) % self.config.gradient_accumulation_steps != 0
 
             with self.device.autocast():
                 logits = self.model(inputs, doc_ids=doc_ids)
@@ -275,9 +262,7 @@ class PreTrainer:
                     loss = masked_loss / mask_sum.float()
                 else:
                     logger.warning(f"Zero mask sum at step {step}, skipping batch")
-                    loss = torch.tensor(
-                        0.0, device=self.device.device, dtype=torch.float32
-                    )
+                    loss = torch.tensor(0.0, device=self.device.device, dtype=torch.float32)
                 loss = loss / self.config.gradient_accumulation_steps
 
             if micro_step % self.config.gradient_accumulation_steps == 0:
@@ -306,9 +291,7 @@ class PreTrainer:
                     * self.process_info["world_size"]
                     * self.config.gradient_accumulation_steps
                 )
-                tokens_per_second = (
-                    tokens_per_step / step_time if step_time > 0 else 0.0
-                )
+                tokens_per_second = tokens_per_step / step_time if step_time > 0 else 0.0
                 elapsed_time = time.perf_counter() - train_start_time
 
                 metrics = {
@@ -319,9 +302,7 @@ class PreTrainer:
                     "train/elapsed_time_sec": elapsed_time,
                     "scheduler/lr_multiplier": scheduler_metrics["lr_multiplier"],
                     "scheduler/muon_momentum": scheduler_metrics["muon_momentum"],
-                    "scheduler/muon_weight_decay": scheduler_metrics[
-                        "muon_weight_decay"
-                    ],
+                    "scheduler/muon_weight_decay": scheduler_metrics["muon_weight_decay"],
                 }
 
                 # Increment step counter after completing gradient accumulation
@@ -341,15 +322,11 @@ class PreTrainer:
                         for i, sample in enumerate(samples, 1):
                             with torch.no_grad():
                                 input_tensor = (
-                                    sample["input_tokens"]
-                                    .unsqueeze(0)
-                                    .to(self.device.device)
+                                    sample["input_tokens"].unsqueeze(0).to(self.device.device)
                                 )
                                 logits = self.model(input_tensor)
                                 pred_tokens = logits.argmax(dim=-1).squeeze(0)
-                                pred_str = self.tokenizer.decode(
-                                    pred_tokens.unsqueeze(0)
-                                )[0]
+                                pred_str = self.tokenizer.decode(pred_tokens.unsqueeze(0))[0]
 
                             logger.info(f"Sample {i}:")
                             logger.info(f"Input:  ...{sample['input_str'][-100:]}")
@@ -369,10 +346,7 @@ class PreTrainer:
                     self.is_main_process
                     and self.config.ckpt.save_checkpoint_every_n_steps is not None
                 ):
-                    if (
-                        step % self.config.ckpt.save_checkpoint_every_n_steps == 0
-                        and step > 0
-                    ):
+                    if step % self.config.ckpt.save_checkpoint_every_n_steps == 0 and step > 0:
                         self.checkpointer.save_checkpoint(
                             step=step,
                             model=self.model,
@@ -388,9 +362,7 @@ class PreTrainer:
                         f"Tokens/s: {metrics['train/tokens_per_second']:.2f} | "
                         f"Memory: {self.device.memory()}"
                     )
-                    self._log_wandb(
-                        {**metrics, "train/memory": self.device.memory()}, step=step
-                    )
+                    self._log_wandb({**metrics, "train/memory": self.device.memory()}, step=step)
 
                 accumulated_loss = 0.0
 

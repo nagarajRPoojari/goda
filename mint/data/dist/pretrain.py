@@ -10,16 +10,25 @@ from mint.utils.device import Device
 from mint.utils.logger import logger
 
 class DistributedBOSBestfitPretrainDataloader(DistributedDataloader):
-    def __init__(self, device: Device, config: DataloaderConfig, tokenizer: Tokenizer,
-                 min_shards_required: int = 2, max_shards_to_wait: int = -1,
-                 shard_check_interval: float = 5.0) -> None:
+    def __init__(self, 
+                 device: Device, 
+                 config: DataloaderConfig, 
+                 tokenizer: Tokenizer,
+                 min_shards_required: int = 2, 
+                 max_shards_to_wait: int = -1,
+                 shard_check_interval: float = 5.0,
+                 *args, 
+                 **kwargs
+                 ) -> None:
         
         super().__init__(
-            device=device,
-            data_dir=config.data_dir,
-            batch_size=config.batch_size,
-            seq_len=config.seq_length,
-            tokenizer=tokenizer
+            device,
+            config.data_dir,
+            config.batch_size,
+            config.seq_length,
+            tokenizer,
+            args,
+            kwargs
         )
 
         self.buffer_size = config.buffer_size

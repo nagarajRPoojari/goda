@@ -1,0 +1,23 @@
+{
+    "[python]": {
+        "editor.formatOnSave": true,
+        "editor.codeActionsOnSave": {
+            "source.fixAll.ruff": "explicit",
+            "source.organizeImports.ruff": "explicit"
+        },
+        "editor.defaultFormatter": "charliermarsh.ruff"
+    },
+    "ruff.nativeServer": "on",
+    "ruff.enable": true,
+    "ruff.lint.enable": true,
+    "ruff.format.enable": true,
+    "ruff.trace.server": "verbose",
+    "ruff.configurationPreference": "filesystemFirst",
+    "ruff.showSyntaxErrors": true,
+    "ruff.organizeImports": true,
+    "ruff.fixAll": true,
+    "python.analysis.diagnosticSeverityOverrides": {
+        "reportUnknownVariableType": "none",
+        "reportAttributeAccessIssue": "none"
+    }
+}
