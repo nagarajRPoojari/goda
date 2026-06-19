@@ -9,15 +9,26 @@ from mint.utils.device import Device
 from mint.utils.logger import logger
 
 class DistributedSFTDataloader(DistributedDataloader):
-    def __init__(self, device: Device, config: DataloaderConfig, tokenizer: Tokenizer, datasets: list[SFTDataset], shuffle: bool = True) -> None:
-        super().__init__(
-            device=device,
-            data_dir="",
-            batch_size=config.batch_size,
-            seq_len=config.seq_length,
-            tokenizer=tokenizer
-        )
+    def __init__(self, 
+                 device: Device, 
+                 config: DataloaderConfig, 
+                 tokenizer: Tokenizer, 
+                 datasets: list[SFTDataset],
+                 shuffle: bool = True,
+                 *args, 
+                 **kwargs
+                ) -> None:
         
+        super().__init__(
+            device,
+            config.data_dir,
+            config.batch_size,
+            config.seq_length,
+            tokenizer,
+            args,
+            kwargs
+        )
+
         self.datasets = datasets
         self.max_tokens = config.seq_length
         self.shuffle = shuffle

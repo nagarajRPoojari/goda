@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
+from collections.abc import Generator
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Generator, Tuple
 
 import torch
 
@@ -28,6 +28,8 @@ class DistributedDataloader(Sampler, ABC):
         batch_size: int,
         seq_len: int,
         tokenizer: Tokenizer,
+        *args,
+        **kwargs,
     ) -> None:
         self.device = device
         self.data_dir = Path(data_dir)
@@ -38,7 +40,7 @@ class DistributedDataloader(Sampler, ABC):
     @abstractmethod
     def batch_loader(
         self, split: str = "train", resume_state: dict | None = None
-    ) -> Generator[Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]]:
+    ) -> Generator[tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]]:
         raise NotImplementedError
 
     @abstractmethod

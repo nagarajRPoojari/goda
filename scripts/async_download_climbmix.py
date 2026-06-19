@@ -12,6 +12,7 @@ import aiohttp
 
 from mint.utils.logger import logger
 
+
 try:
     from huggingface_hub import (
         hf_hub_download,  # pyright: ignore[reportUnknownVariableType]
@@ -76,9 +77,7 @@ async def download_file_async(
     try:
         async with session.get(url) as response:
             if response.status != 200:
-                logger.info(
-                    f"  ✗ Failed to download shard {shard_idx}: HTTP {response.status}"
-                )
+                logger.info(f"  ✗ Failed to download shard {shard_idx}: HTTP {response.status}")
                 return False
 
             total_size = int(response.headers.get("content-length", 0))
@@ -146,9 +145,7 @@ async def download_shard(
         destination = output_dir / "val" / shard_name
 
     if destination.exists():
-        logger.info(
-            f"[{shard_idx + 1}/{total_shards}] Skipping {shard_name} (already exists)"
-        )
+        logger.info(f"[{shard_idx + 1}/{total_shards}] Skipping {shard_name} (already exists)")
         coordinator.increment_downloaded()
         return
 
@@ -162,9 +159,7 @@ async def download_shard(
         )
     else:
         url = f"{base_url}/{shard_name}"
-        success = await download_file_async(
-            session, url, destination, shard_idx, total_shards
-        )
+        success = await download_file_async(session, url, destination, shard_idx, total_shards)
 
     if success:
         logger.info(f"  ✓ Saved to {destination}")
@@ -248,7 +243,7 @@ def download_process(
     coordinator: DownloadCoordinator,
     max_concurrent: int,
 ) -> None:
-    """Entry point for download process"""
+    """Entry point for download process."""
     asyncio.run(
         download_all_shards(
             output_dir,
@@ -262,19 +257,13 @@ def download_process(
     )
 
 
-def wait_for_training_ready(
-    coordinator: DownloadCoordinator, check_interval: float = 2.0
-) -> None:
-    """Wait until minimum shards are available for training"""
-    logger.info(
-        f"Waiting for minimum {coordinator.min_shards} shards to be downloaded..."
-    )
+def wait_for_training_ready(coordinator: DownloadCoordinator, check_interval: float = 2.0) -> None:
+    """Wait until minimum shards are available for training."""
+    logger.info(f"Waiting for minimum {coordinator.min_shards} shards to be downloaded...")
 
     while not coordinator.is_ready_for_training():
         status = coordinator.get_status()
-        logger.info(
-            f"  Downloaded: {status['downloaded']}/{coordinator.min_shards} shards"
-        )
+        logger.info(f"  Downloaded: {status['downloaded']}/{coordinator.min_shards} shards")
         time.sleep(check_interval)
 
     logger.info(f"✓ Training ready! {coordinator.min_shards} shards available.")
@@ -315,7 +304,7 @@ def start_download_and_training(
     return coordinator, download_proc
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(
         description="Async download ClimbMix dataset with training coordination",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
@@ -368,7 +357,7 @@ def main():
 
     args = parser.parse_args()
 
-    coordinator, download_proc = start_download_and_training(
+    _coordinator, download_proc = start_download_and_training(
         output_dir=args.output_dir,
         num_train_shards=args.num_train_shards,
         min_shards_before_training=args.min_shards_before_training,
