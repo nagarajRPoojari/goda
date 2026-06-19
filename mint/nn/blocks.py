@@ -1,7 +1,6 @@
-from typing import Optional
-
 import torch
-import torch.nn as nn
+from torch import nn
+
 from mint.kvcache.base import KVCache
 from mint.nn.attn import GroupedQueryAttention
 from mint.nn.ffn import GLU
@@ -48,7 +47,7 @@ class GQAGluBlock(nn.Module):
     def forward(
         self,
         x: torch.Tensor,
-        kv_cache: Optional[KVCache] = None,
+        kv_cache: KVCache | None = None,
         start_pos: int = 0,
         # optional: we will apply causal on top of a base attn_mask, passed in special cases
         # like [PAD] tokens in SFT or blocking cross sentence attn in best fit pretrain

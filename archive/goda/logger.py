@@ -1,7 +1,9 @@
-from loguru import logger
 import sys
 
-logger.remove() 
+from loguru import logger
+
+
+logger.remove()
 
 logger.add(
     sys.stderr,

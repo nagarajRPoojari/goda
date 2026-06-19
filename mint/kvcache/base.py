@@ -1,5 +1,3 @@
-from typing import Tuple
-
 import torch
 
 
@@ -32,13 +30,11 @@ class KVCache:
             device=device,
         )
 
-        self.cache_seqlens = torch.zeros(
-            max_batch_size, dtype=torch.int32, device=device
-        )
+        self.cache_seqlens = torch.zeros(max_batch_size, dtype=torch.int32, device=device)
 
     def update(
         self, k: torch.Tensor, v: torch.Tensor, start_pos: int = 0
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         batch_size, seq_len, n_kv_heads, head_dim = k.shape  # B, T, H, D
 
         self.k_cache[:batch_size, start_pos : start_pos + seq_len, :, :] = k
@@ -53,11 +49,11 @@ class KVCache:
 
         return full_k, full_v
 
-    def get(self) -> Tuple[torch.Tensor, torch.Tensor]:
+    def get(self) -> tuple[torch.Tensor, torch.Tensor]:
         pos = self.cache_seqlens[0].item()
         return (self.k_cache[:, :pos, :, :], self.v_cache[:, :pos, :, :])
 
-    def get_cache_tensors(self) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def get_cache_tensors(self) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         return self.k_cache, self.v_cache, self.cache_seqlens
 
     def reset(self):

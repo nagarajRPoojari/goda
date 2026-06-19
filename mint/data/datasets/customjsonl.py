@@ -1,6 +1,6 @@
 import json
 import os
-from typing import Any, Dict
+from typing import Any
 
 from mint.data.datasets.base import SFTTrainDataset
 
@@ -12,7 +12,7 @@ class CustomJSON(SFTTrainDataset):
         self.conversations = []
 
         if os.path.exists(filepath):
-            with open(filepath, "r", encoding="utf-8") as f:
+            with open(filepath, encoding="utf-8") as f:
                 for line in f:
                     line = line.strip()
                     if line:
@@ -21,5 +21,5 @@ class CustomJSON(SFTTrainDataset):
     def __len__(self) -> int:
         return len(self.conversations)
 
-    def __getitem__(self, index: int) -> Dict[str, Any]:
+    def __getitem__(self, index: int) -> dict[str, Any]:
         return {"messages": self.conversations[index]}

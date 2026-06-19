@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import torch
-import torch.nn as nn
+from torch import nn
 from torch.optim import Optimizer
 
 from mint.config.base import Config

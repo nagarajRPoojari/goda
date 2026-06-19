@@ -25,11 +25,11 @@ class Tokenizer:
 
     def encode(
         self,
-        batch: List[str],
+        batch: list[str],
         add_bos: bool = True,
         add_eos: bool = False,
         padding: bool = True,
-        max_length: Optional[int] = None,
+        max_length: int | None = None,
     ) -> torch.Tensor:
         return torch.tensor(
             self.encode_to_list(
@@ -44,11 +44,11 @@ class Tokenizer:
 
     def encode_to_list(
         self,
-        batch: List[str],
+        batch: list[str],
         add_bos: bool = True,
         add_eos: bool = False,
         padding: bool = True,
-        max_length: Optional[int] = None,
+        max_length: int | None = None,
     ) -> list[Any]:
         encoded = self.encoding.encode_batch(text=batch, disallowed_special=())
 
@@ -73,12 +73,11 @@ class Tokenizer:
                 seq + [self.pad_token] * (max_len - len(seq)) for seq in processed
             ]
             return padded
-        else:
-            return [seq for seq in processed]
+        return [seq for seq in processed]
 
     def decode(
         self, batch: torch.Tensor, skip_special_tokens: bool = True
-    ) -> List[str]:
+    ) -> list[str]:
         if batch.dim() == 1:
             batch = batch.unsqueeze(0)
 
@@ -98,11 +97,11 @@ class Tokenizer:
         return self.special_tokens[token]
 
     def render_conversation(
-        self, conversation: Dict, max_tokens: int = 2048
-    ) -> Tuple[List[int], List[int]]:
+        self, conversation: dict, max_tokens: int = 2048
+    ) -> tuple[list[int], list[int]]:
         ids, mask = [], []
 
-        def add_tokens(token_ids: Union[int, List[int]], mask_val: int):
+        def add_tokens(token_ids: int | list[int], mask_val: int):
             if isinstance(token_ids, int):
                 token_ids = [token_ids]
             ids.extend(token_ids)

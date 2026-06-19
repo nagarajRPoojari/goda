@@ -1,6 +1,6 @@
-import sys
 import io
 import signal
+import sys
 from contextlib import contextmanager
 from typing import NamedTuple
 
@@ -30,44 +30,44 @@ def time_limit(seconds: int):
 
 
 def execute_code(code: str, timeout: int = 5) -> ExecutionResult:
-    
+
     old_stdout = sys.stdout
     old_stderr = sys.stderr
     redirected_output = io.StringIO()
     redirected_error = io.StringIO()
-    
+
     try:
         sys.stdout = redirected_output
         sys.stderr = redirected_error
-        
+
         with time_limit(timeout):
             exec_globals = {
-                '__builtins__': __builtins__,
+                "__builtins__": __builtins__,
             }
             exec(code, exec_globals)
-        
+
         output = redirected_output.getvalue()
         error = redirected_error.getvalue()
-        
+
         success = len(error) == 0
-        
+
         return ExecutionResult(
             success=success,
             output=output,
             error=error
         )
-        
+
     except TimeoutException as e:
         return ExecutionResult(
             success=False,
             output=redirected_output.getvalue(),
-            error=f"Timeout: {str(e)}"
+            error=f"Timeout: {e!s}"
         )
     except Exception as e:
         return ExecutionResult(
             success=False,
             output=redirected_output.getvalue(),
-            error=f"{type(e).__name__}: {str(e)}"
+            error=f"{type(e).__name__}: {e!s}"
         )
     finally:
         sys.stdout = old_stdout

@@ -1,16 +1,18 @@
-import os
 import json
-from typing import Dict, Any
+import os
+from typing import Any
+
 from goda.sft.base import SFTTrainDataset
+
 
 class CustomJSON(SFTTrainDataset):
     def __init__(self, filepath: str) -> None:
         super().__init__()
         self.filepath = filepath
         self.conversations = []
-        
+
         if os.path.exists(filepath):
-            with open(filepath, 'r', encoding='utf-8') as f:
+            with open(filepath, encoding="utf-8") as f:
                 for line in f:
                     line = line.strip()
                     if line:
@@ -19,5 +21,5 @@ class CustomJSON(SFTTrainDataset):
     def __len__(self) -> int:
         return len(self.conversations)
 
-    def __getitem__(self, index: int) -> Dict[str, Any]:
+    def __getitem__(self, index: int) -> dict[str, Any]:
         return {"messages": self.conversations[index]}

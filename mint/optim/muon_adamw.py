@@ -1,10 +1,11 @@
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable
 
 import torch
-from mint.config.base import Config
 from torch import Tensor
 from torch.optim import Optimizer
+
+from mint.config.base import Config
 
 
 @dataclass

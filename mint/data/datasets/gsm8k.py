@@ -1,5 +1,5 @@
 import re
-from typing import Any, Dict, Literal
+from typing import Any, Literal
 
 from datasets import load_dataset
 
@@ -24,7 +24,7 @@ class GSM8K(SFTTrainDataset, SFTEvalDataset):
     def __len__(self) -> int:
         return len(self.ds)
 
-    def __getitem__(self, index: int) -> Dict[str, Any]:
+    def __getitem__(self, index: int) -> dict[str, Any]:
         row = self.ds[index]
         parts = []
 
@@ -48,7 +48,7 @@ class GSM8K(SFTTrainDataset, SFTEvalDataset):
             ]
         }
 
-    def evaluate(self, conversation: Dict[str, Any], completion: str) -> bool:
+    def evaluate(self, conversation: dict[str, Any], completion: str) -> bool:
         ground_truth_parts = conversation["messages"][-1]["content"]
         ground_truth_text = ground_truth_parts[-1]["text"]
 

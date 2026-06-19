@@ -1,8 +1,9 @@
 from dataclasses import dataclass
-from typing import Optional
 
 import torch
-import torch.nn as nn
+from torch import nn
+from torch.utils.checkpoint import checkpoint
+
 from mint.kvcache.base import KVCache
 from mint.nn.base import ModelConfig
 from mint.nn.blocks import GQAGluBlock
@@ -10,7 +11,6 @@ from mint.nn.norm import RMSNorm
 from mint.optim.muon_adamw import MuonAdamW, MuonAdamWConfig
 from mint.trainer.scheduler import SchedulerConfig
 from mint.utils.logger import logger
-from torch.utils.checkpoint import checkpoint
 
 
 @dataclass
@@ -70,7 +70,7 @@ class Gemma(nn.Module):
     def forward(
         self,
         input_ids: torch.Tensor,
-        kv_caches: Optional[list[KVCache]] = None,
+        kv_caches: list[KVCache] | None = None,
         start_pos: int = 0,
         doc_ids: torch.Tensor = None,
         attn_mask: torch.Tensor = None,
@@ -110,9 +110,9 @@ class Gemma(nn.Module):
         input_ids: torch.Tensor,
         max_new_tokens: int,
         temperature: float = 1.0,
-        top_k: Optional[int] = None,
-        top_p: Optional[float] = None,
-        kv_caches: Optional[list[KVCache]] = None,
+        top_k: int | None = None,
+        top_p: float | None = None,
+        kv_caches: list[KVCache] | None = None,
     ) -> torch.Tensor:
 
         self.eval()

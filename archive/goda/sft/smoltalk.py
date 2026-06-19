@@ -1,6 +1,9 @@
-from typing import Dict, Any, Literal
+from typing import Any, Literal
+
 from datasets import load_dataset
+
 from goda.sft.base import SFTTrainDataset
+
 
 class SmolTalk(SFTTrainDataset):
     def __init__(self, split: Literal["train", "test"] = "train") -> None:
@@ -10,6 +13,6 @@ class SmolTalk(SFTTrainDataset):
     def __len__(self) -> int:
         return len(self.ds)
 
-    def __getitem__(self, index: int) -> Dict[str, Any]:
+    def __getitem__(self, index: int) -> dict[str, Any]:
         return {"messages": self.ds[index]["messages"]}
 

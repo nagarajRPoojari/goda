@@ -1,6 +1,5 @@
 import math
 from abc import ABC, abstractmethod
-from typing import Optional, Tuple
 
 import torch
 from torch import nn
@@ -13,7 +12,7 @@ class PosEmbeddings(nn.Module, ABC):
     @abstractmethod
     def forward(
         self, q: torch.Tensor, k: torch.Tensor, start_pos: int
-    ) -> Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]]: ...
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor | None]: ...
 
 
 class SinusoidalPosEmbeddings(PosEmbeddings):
@@ -39,7 +38,7 @@ class SinusoidalPosEmbeddings(PosEmbeddings):
 
     def forward(
         self, q: torch.Tensor, k: torch.Tensor, start_pos: int = 0
-    ) -> Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor | None]:
         seqlen = q.shape[1]
 
         pe_slice = self.pe[:, start_pos : start_pos + seqlen, :, :].to(q.dtype)
@@ -99,7 +98,7 @@ class RoPE(PosEmbeddings):
 
     def forward(
         self, q: torch.Tensor, k: torch.Tensor, start_pos: int = 0
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         seqlen = q.shape[1]
 
         # Slice the precomputed embeddings to match the current sequence length
@@ -158,7 +157,7 @@ class NoPE(PosEmbeddings):
     @abstractmethod
     def forward(
         self, q: torch.Tensor, k: torch.Tensor, start_pos: int
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         return q, k, None
 
 
@@ -179,19 +178,18 @@ class ALiBiPositionalBias(PosEmbeddings):
 
         if math.log2(n_heads).is_integer():
             return get_slopes_power_of_2(n_heads)
-        else:
-            # should handle non-power-of-2 head counts gracefully
-            closest_power_of_2 = 2 ** math.floor(math.log2(n_heads))
-            return (
-                get_slopes_power_of_2(closest_power_of_2)
-                + self._get_slopes(2 * closest_power_of_2)[0::2][
-                    : n_heads - closest_power_of_2
-                ]
-            )
+        # should handle non-power-of-2 head counts gracefully
+        closest_power_of_2 = 2 ** math.floor(math.log2(n_heads))
+        return (
+            get_slopes_power_of_2(closest_power_of_2)
+            + self._get_slopes(2 * closest_power_of_2)[0::2][
+                : n_heads - closest_power_of_2
+            ]
+        )
 
     def forward(
         self, q: torch.Tensor, k: torch.Tensor, start_pos: int = 0
-    ) -> Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor | None]:
         seq_len_q = q.shape[1]
 
         total_kv_len = start_pos + seq_len_q

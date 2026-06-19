@@ -1,7 +1,8 @@
 from ryven.node_env import *
 
+
 class MyCustomNode(Node):
-    title = 'My Node'
+    title = "My Node"
     init_inputs = [NodeInputType()]
     init_outputs = [NodeOutputType()]
 
@@ -9,5 +10,6 @@ class MyCustomNode(Node):
         # Your custom logic here
         data = self.input(0)
         self.set_output_val(0, data * 2)
+
 
 export_nodes(MyCustomNode)

@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from enum import Enum
 from typing import Any
 
-import torch.nn as nn
+from torch import nn
 
 from mint.config.base import Config
 from mint.utils.device import Device

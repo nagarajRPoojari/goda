@@ -1,18 +1,18 @@
 import importlib.util
-from typing import Any
 import time
+from typing import Any
 
 import torch
-import torch.distributed as dist
-import torch.nn as nn
+from torch import nn
+from torch.optim import Optimizer
+
 from goda.checkpointer import Checkpointer
 from goda.config import Config
 from goda.dataloader import DistributedSFTDataloader
 from goda.device import Device
+from goda.eval import ChatCoreEvaluator
 from goda.logger import logger
 from goda.scheduler import Scheduler
-from goda.eval import ChatCoreEvaluator
-from torch.optim import Optimizer
 
 
 class SFTTrainer:
@@ -27,14 +27,14 @@ class SFTTrainer:
         self.process_info = self.device.process_info()
         self.is_main_process = self.process_info["is_main"]
         self.wandb_run = self._init_wandb()
-        
+
         self.checkpointer = Checkpointer(
             checkpoint_dir=config.checkpoint_dir,
             save_every_n_steps=config.save_checkpoint_every_n_steps,
             keep_last_n=config.keep_last_n_checkpoints,
             is_main_process=self.is_main_process,
         )
-        
+
         self.scheduler = Scheduler(
             num_iterations=config.train_num_steps,
             warmup_steps=config.warmup_steps,
@@ -46,7 +46,7 @@ class SFTTrainer:
             muon_momentum_final=config.muon_momentum_final,
             weight_decay=config.weight_decay,
         )
-        
+
         self.evaluator = None
         if eval_datasets:
             self.evaluator = ChatCoreEvaluator(
@@ -56,10 +56,10 @@ class SFTTrainer:
                 device=device,
                 datasets=eval_datasets,
             )
-            
+
             if config.resume_from_checkpoint:
                 self._load_pretrained_checkpoint()
-        
+
     def _load_pretrained_checkpoint(self):
         checkpoint_info = self.checkpointer.load_checkpoint(
             model=self.model,
@@ -67,9 +67,9 @@ class SFTTrainer:
             checkpoint_path=self.config.resume_from_checkpoint,
             load_best=self.config.load_best_checkpoint,
         )
-            
+
         logger.info(f"Loaded pretrained checkpoint from step {checkpoint_info.get('step', 'unknown')}")
-        
+
         # Check for NaN/Inf in model parameters
         nan_params = []
         inf_params = []
@@ -78,14 +78,14 @@ class SFTTrainer:
                 nan_params.append(name)
             if torch.isinf(param).any():
                 inf_params.append(name)
-        
+
         if nan_params:
             logger.error(f"NaN detected in model parameters after loading checkpoint: {nan_params}")
         if inf_params:
             logger.error(f"Inf detected in model parameters after loading checkpoint: {inf_params}")
-        
+
         logger.info("Starting SFT training from step 0")
-    
+
     def _init_wandb(self) -> Any | None:
         if not self.config.wandb_enabled or not self.is_main_process:
             return None
@@ -110,16 +110,16 @@ class SFTTrainer:
     def _log_wandb(self, metrics: dict, step: int):
         if self.wandb_run is not None:
             self.wandb_run.log(metrics, step=step)
-    
+
     def _run_evaluation(self, step: int, num_examples: int | None = None):
         if self.evaluator is None:
             return
-        
+
         self.model.eval()
         with torch.no_grad():
             results = self.evaluator.evaluate(num_examples=num_examples)
         self.model.train()
-        
+
         metrics = {}
         for key, value in results.items():
             if isinstance(value, dict):
@@ -127,11 +127,11 @@ class SFTTrainer:
                     metrics[f"eval/{key}/{sub_key}"] = sub_value
             else:
                 metrics[f"eval/{key}"] = value
-        
+
         if self.is_main_process:
             log_items = " | ".join(f"{key}={value:.4f}" for key, value in metrics.items() if isinstance(value, (int, float)))
             logger.info(f"Eval complete | step={step} | {log_items}")
-        
+
         self._log_wandb(metrics, step=step)
 
     def train(self):
@@ -140,7 +140,7 @@ class SFTTrainer:
         accumulated_loss = 0.0
         micro_step = 0
         step = 0
-        
+
         for step, (inputs, targets, mask) in enumerate(self.dataloader.batch_loader(split="train"), start=0):
             if self.checkpointer.interrupt_requested:
                 if self.is_main_process:
@@ -154,7 +154,7 @@ class SFTTrainer:
                     )
                     logger.info("Checkpoint saved. Exiting gracefully.")
                 break
-            
+
             if step >= self.config.train_num_steps:
                 break
 
@@ -166,22 +166,22 @@ class SFTTrainer:
                 logger.error(f"NaN detected in inputs at step {step}")
             if torch.isinf(inputs).any():
                 logger.error(f"Inf detected in inputs at step {step}")
-            
+
             with self.device.autocast():
                 logits = self.model(inputs)
-                
+
                 # Check for NaN in logits
                 if torch.isnan(logits).any():
                     logger.warning(f"NaN detected in logits at step {step}")
                     # Log some statistics about the inputs
                     logger.warning(f"Input shape: {inputs.shape}, min: {inputs.min()}, max: {inputs.max()}, mean: {inputs.float().mean()}")
-                
+
                 loss = nn.functional.cross_entropy(
                     logits.view(-1, logits.size(-1)),
                     targets.view(-1),
-                    reduction='none'
+                    reduction="none"
                 )
-                
+
                 mask_sum = mask.sum()
                 if mask_sum > 0:
                     masked_loss = (loss * mask.view(-1).float()).sum()
@@ -189,7 +189,7 @@ class SFTTrainer:
                 else:
                     logger.warning(f"Zero mask sum at step {step}, skipping batch")
                     loss = torch.tensor(0.0, device=self.device.device, dtype=torch.float32)
-                
+
                 loss = loss / self.config.gradient_accumulation_steps
 
             if micro_step % self.config.gradient_accumulation_steps == 0:
@@ -226,21 +226,21 @@ class SFTTrainer:
 
                 if (step + 1) % self.config.eval_every_n_steps == 0 and step > 0:
                     self._run_evaluation(step=step, num_examples=100)
-                    
+
                     if self.is_main_process and self.tokenizer:
                         samples = self.dataloader.sample(num_samples=3)
                         for i, sample in enumerate(samples, 1):
                             with torch.no_grad():
-                                input_tensor = sample['input_tokens'].unsqueeze(0).to(self.device.device)
+                                input_tensor = sample["input_tokens"].unsqueeze(0).to(self.device.device)
                                 logits = self.model(input_tensor)
                                 pred_tokens = logits.argmax(dim=-1).squeeze(0)
                                 pred_str = self.tokenizer.decode(pred_tokens.unsqueeze(0))[0]
-                            
+
                             logger.info(f"Sample {i}:")
                             logger.info(f"Input:  ...{sample['input_str'][-100:]}")
                             logger.info(f"Target: ...{sample['target_str'][-100:]}")
                             logger.info(f"Pred:   ...{pred_str[-100:]}")
-                
+
                 if self.is_main_process and self.config.save_checkpoint_every_n_steps is not None:
                     if (step + 1) % self.config.save_checkpoint_every_n_steps == 0 and step > 0:
                         self.checkpointer.save_checkpoint(
@@ -271,6 +271,6 @@ class SFTTrainer:
                 dataloader_state={},
                 force=True,
             )
-        
+
         if self.wandb_run is not None:
             self.wandb_run.finish()

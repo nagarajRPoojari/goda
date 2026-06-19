@@ -2,10 +2,10 @@ import json
 import signal
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 import torch
-import torch.nn as nn
+from torch import nn
 from torch.optim import Optimizer
 
 from mint.config.base import Config
@@ -48,11 +48,11 @@ class Checkpointer:
         step: int,
         model: nn.Module,
         optimizer: Optimizer,
-        dataloader_state: Dict[str, Any],
-        val_loss: Optional[float] = None,
+        dataloader_state: dict[str, Any],
+        val_loss: float | None = None,
         is_best: bool = False,
         force: bool = False,
-    ) -> Optional[Path]:
+    ) -> Path | None:
 
         if not self.is_main_process:
             return None
@@ -104,7 +104,7 @@ class Checkpointer:
                 old_checkpoint.unlink()
                 logger.debug(f"🗑️  Removed old checkpoint: {old_checkpoint.name}")
 
-    def _save_metadata(self, step: int, val_loss: Optional[float]):
+    def _save_metadata(self, step: int, val_loss: float | None):
         metadata = {
             "last_step": step,
             "last_val_loss": val_loss,
@@ -119,9 +119,9 @@ class Checkpointer:
         self,
         model: nn.Module,
         optimizer: Optimizer,
-        checkpoint_path: Optional[str] = None,
+        checkpoint_path: str | None = None,
         load_best: bool = False,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
 
         if checkpoint_path is not None:
             path = Path(checkpoint_path)
@@ -159,9 +159,9 @@ class Checkpointer:
             return True
         return False
 
-    def get_resume_info(self) -> Dict[str, Any]:
+    def get_resume_info(self) -> dict[str, Any]:
         metadata_path = self.checkpoint_dir / "metadata.json"
         if metadata_path.exists():
-            with open(metadata_path, "r") as f:
+            with open(metadata_path) as f:
                 return json.load(f)
         return {}

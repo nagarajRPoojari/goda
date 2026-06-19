@@ -1,4 +1,4 @@
-from typing import Any, Dict, Literal
+from typing import Any, Literal
 
 from datasets import load_dataset
 
@@ -23,7 +23,7 @@ class MMLU(SFTTrainDataset, SFTEvalDataset):
     def __len__(self) -> int:
         return len(self.ds)
 
-    def __getitem__(self, index: int) -> Dict[str, Any]:
+    def __getitem__(self, index: int) -> dict[str, Any]:
         row = self.ds[index]
         user_msg = build_mc_prompt(row["question"], self.LETTERS, row["choices"])
 
@@ -36,5 +36,5 @@ class MMLU(SFTTrainDataset, SFTEvalDataset):
             "letters": self.LETTERS,
         }
 
-    def evaluate(self, conversation: Dict[str, Any], completion: str) -> bool:
+    def evaluate(self, conversation: dict[str, Any], completion: str) -> bool:
         return completion == conversation["messages"][-1]["content"]

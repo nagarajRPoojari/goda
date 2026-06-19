@@ -1,7 +1,7 @@
-from abc import ABC, abstractmethod
-from typing import Optional, List
-import torch.nn as nn
 import math
+from abc import ABC, abstractmethod
+
+from torch import nn
 
 
 class Adapter(ABC):
@@ -18,15 +18,15 @@ class LoRALinear(nn.Module):
         super().__init__()
         self.base_layer = base_layer
         self.scaling = alpha / r
-        
+
         self.base_layer.weight.requires_grad = False
         if self.base_layer.bias is not None:
             self.base_layer.bias.requires_grad = False
-            
+
         self.lora_A = nn.Linear(base_layer.in_features, r, bias=False)
         self.lora_B = nn.Linear(r, base_layer.out_features, bias=False)
         self.dropout = nn.Dropout(dropout)
-        
+
         nn.init.kaiming_uniform_(self.lora_A.weight, a=math.sqrt(5))
         nn.init.zeros_(self.lora_B.weight)
 
@@ -40,23 +40,24 @@ class LoRA(Adapter):
     def __init__(self):
         super().__init__()
 
-    def apply(self, model: nn.Module, target_modules: Optional[List[str]] = None, r: int = 8, alpha: int = 16):
+    def apply(
+        self, model: nn.Module, target_modules: list[str] | None = None, r: int = 8, alpha: int = 16
+    ):
         if target_modules is None:
-                target_modules = ["wq", "wv"]
+            target_modules = ["wq", "wv"]
 
         for name, module in model.named_modules():
             # Target specific linear projections
             if any(t in name for t in target_modules) and isinstance(module, nn.Linear):
                 # Parse the tree to safely replace the module in-place
-                parent_path = name.rsplit('.', 1)
+                parent_path = name.rsplit(".", 1)
                 parent = model.get_submodule(parent_path[0]) if len(parent_path) > 1 else model
                 setattr(parent, parent_path[-1], LoRALinear(module, r, alpha))
-                
+
         # Guarantee only LoRA parameters are tracking gradients
         for name, param in model.named_parameters():
             if "lora" not in name:
                 param.requires_grad = False
 
-class QLoRALinear:
-    ...
 
+class QLoRALinear: ...

@@ -1,7 +1,5 @@
-from typing import Optional
-
 import torch
-import torch.nn as nn
+from torch import nn
 
 from mint.kvcache.base import KVCache
 from mint.nn.flashattn import FlashAttention
@@ -30,18 +28,10 @@ class GroupedQueryAttention(nn.Module):
 
         self.attention = FlashAttention(use_custom_fa=True)
 
-        self.wq = nn.Linear(
-            embed_dim, self.n_heads * self.head_dim, bias=False, dtype=dtype
-        )
-        self.wk = nn.Linear(
-            embed_dim, self.n_kv_heads * self.head_dim, bias=False, dtype=dtype
-        )
-        self.wv = nn.Linear(
-            embed_dim, self.n_kv_heads * self.head_dim, bias=False, dtype=dtype
-        )
-        self.wo = nn.Linear(
-            self.n_heads * self.head_dim, embed_dim, bias=False, dtype=dtype
-        )
+        self.wq = nn.Linear(embed_dim, self.n_heads * self.head_dim, bias=False, dtype=dtype)
+        self.wk = nn.Linear(embed_dim, self.n_kv_heads * self.head_dim, bias=False, dtype=dtype)
+        self.wv = nn.Linear(embed_dim, self.n_kv_heads * self.head_dim, bias=False, dtype=dtype)
+        self.wo = nn.Linear(self.n_heads * self.head_dim, embed_dim, bias=False, dtype=dtype)
 
         self.q_norm = RMSNorm(self.head_dim)
         self.k_norm = RMSNorm(self.head_dim)
@@ -49,7 +39,7 @@ class GroupedQueryAttention(nn.Module):
     def forward(
         self,
         x,
-        kv_cache: Optional[KVCache] = None,
+        kv_cache: KVCache | None = None,
         start_pos: int = 0,
         # optional: we will apply causal on top of a base attn_mask, passed in special cases
         # like [PAD] tokens in SFT or blocking cross sentence attn in best fit pretrain
@@ -106,18 +96,10 @@ class MultiHeadAttention(nn.Module):
 
         self.attention = FlashAttention(use_custom_fa=True)
 
-        self.wq = nn.Linear(
-            embed_dim, self.n_heads * self.head_dim, bias=False, dtype=dtype
-        )
-        self.wk = nn.Linear(
-            embed_dim, self.n_heads * self.head_dim, bias=False, dtype=dtype
-        )
-        self.wv = nn.Linear(
-            embed_dim, self.n_heads * self.head_dim, bias=False, dtype=dtype
-        )
-        self.wo = nn.Linear(
-            self.n_heads * self.head_dim, embed_dim, bias=False, dtype=dtype
-        )
+        self.wq = nn.Linear(embed_dim, self.n_heads * self.head_dim, bias=False, dtype=dtype)
+        self.wk = nn.Linear(embed_dim, self.n_heads * self.head_dim, bias=False, dtype=dtype)
+        self.wv = nn.Linear(embed_dim, self.n_heads * self.head_dim, bias=False, dtype=dtype)
+        self.wo = nn.Linear(self.n_heads * self.head_dim, embed_dim, bias=False, dtype=dtype)
 
         self.q_norm = RMSNorm(self.head_dim)
         self.k_norm = RMSNorm(self.head_dim)
@@ -125,7 +107,7 @@ class MultiHeadAttention(nn.Module):
     def forward(
         self,
         x,
-        kv_cache: Optional[KVCache] = None,
+        kv_cache: KVCache | None = None,
         start_pos: int = 0,
         # optional: we will apply causal on top of a base attn_mask, passed in special cases
         # like [PAD] tokens in SFT or blocking cross sentence attn in best fit pretrain
