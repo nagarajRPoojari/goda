@@ -49,7 +49,7 @@ class PreTrainer:
         dataloader: DistributedDataloader,
         device: Device,
         config: PretrainConfig,
-        tokenizer: Any = None,
+        tokenizer: Any = None,  # noqa: ANN401
     ) -> None:
         self.model = model
         self.optimizer = optimizer
@@ -89,7 +89,7 @@ class PreTrainer:
         if config.ckpt.resume_from_checkpoint:
             self._resume_from_checkpoint()
 
-    def _init_wandb(self) -> Any | None:
+    def _init_wandb(self) -> Any | None:  # noqa: ANN401
         if not self.config.lg.wandb_enabled or not self.is_main_process:
             return None
 
@@ -110,7 +110,7 @@ class PreTrainer:
         logger.info(f"W&B initialized | project={self.config.lg.wandb_project} | run={run.name}")
         return run
 
-    def _resume_from_checkpoint(self):
+    def _resume_from_checkpoint(self) -> None:
         checkpoint_info = self.checkpointer.load_checkpoint(
             model=self.model,
             optimizer=self.optimizer,
@@ -149,7 +149,7 @@ class PreTrainer:
         if self.is_main_process:
             gathered_states: list[dict] = [{} for _ in range(self.process_info["world_size"])]
             dist.gather_object(local_state, gathered_states, dst=0)
-            return {"per_rank": {rank: state for rank, state in enumerate(gathered_states)}}
+            return {"per_rank": dict(enumerate(gathered_states))}
 
         dist.gather_object(local_state, None, dst=0)
         return {}
@@ -164,7 +164,7 @@ class PreTrainer:
         per_rank_state = checkpoint_dataloader_state.get("per_rank", {})
         return per_rank_state.get(self.process_info["rank"], {})
 
-    def _log_wandb(self, metrics: dict, step: int):
+    def _log_wandb(self, metrics: dict, step: int) -> None:
         if self.wandb_run is not None:
             self.wandb_run.log(metrics, step=step)
 
@@ -173,8 +173,9 @@ class PreTrainer:
         evaluator: Evaluator,
         step: int,
         metric_prefix: str,
+        *,
         save_checkpoint: bool = False,
-        **eval_kwargs,
+        **eval_kwargs,  # noqa: ANN003
     ) -> dict[str, Any]:
         self.model.eval()
         with torch.no_grad():
@@ -183,7 +184,7 @@ class PreTrainer:
 
         metrics = {}
 
-        def flatten(prefix: str, value: Any):
+        def flatten(prefix: str, value: Any) -> None:  # noqa: ANN401
             if isinstance(value, dict):
                 for sub_key, sub_value in value.items():
                     flatten(f"{prefix}/{sub_key}", sub_value)
@@ -214,7 +215,7 @@ class PreTrainer:
 
         return results
 
-    def train(self):
+    def train(self) -> None:  # noqa: PLR0912, PLR0915
         self.model.train()
         train_start_time = time.perf_counter()
         accumulated_loss = 0.0
@@ -270,7 +271,7 @@ class PreTrainer:
 
             self.device.backward(loss)
             accumulated_loss += loss.item()
-            micro_step += 1
+            micro_step += 1  # noqa: SIM113
 
             if not is_accumulating:
                 scheduler_metrics = self.scheduler.step(self.optimizer, step)
@@ -343,16 +344,19 @@ class PreTrainer:
                     )
 
                 if (
-                    self.is_main_process
-                    and self.config.ckpt.save_checkpoint_every_n_steps is not None
+                    (
+                        self.is_main_process
+                        and self.config.ckpt.save_checkpoint_every_n_steps is not None
+                    )
+                    and step % self.config.ckpt.save_checkpoint_every_n_steps == 0
+                    and step > 0
                 ):
-                    if step % self.config.ckpt.save_checkpoint_every_n_steps == 0 and step > 0:
-                        self.checkpointer.save_checkpoint(
-                            step=step,
-                            model=self.model,
-                            optimizer=self.optimizer,
-                            dataloader_state=self._collect_dataloader_state(),
-                        )
+                    self.checkpointer.save_checkpoint(
+                        step=step,
+                        model=self.model,
+                        optimizer=self.optimizer,
+                        dataloader_state=self._collect_dataloader_state(),
+                    )
 
                 if step % self.config.log_every_n_steps == 0:
                     logger.info(

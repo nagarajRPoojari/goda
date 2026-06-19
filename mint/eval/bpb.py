@@ -11,11 +11,17 @@ from mint.utils.device import Device
 
 
 class BPBEvaluator(Evaluator):
-    def __init__(self, model: nn.Module, config: EvalConfig, device: Device, dataloader: Any):
+    def __init__(
+        self,
+        model: nn.Module,
+        config: EvalConfig,
+        device: Device,
+        dataloader: Any,  # noqa: ANN401
+    ) -> None:
         super().__init__(model, config, device)
         self.dataloader = dataloader
 
-    def evaluate(self, num_steps: int = 10, step: int | None = None) -> dict[str, Any]:
+    def evaluate(self, num_steps: int = 10, _step: int | None = None) -> dict[str, Any]:
         self.model.eval()
         total_loss = 0.0
         eval_start_time = time.perf_counter()

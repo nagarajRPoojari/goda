@@ -193,12 +193,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--depth-ref", type=int, default=12)
     parser.add_argument("--depth-target", type=int, default=None)
-    parser.add_argument(
-        "--flops", type=float, default=None, help="Total compute budget in FLOPs"
-    )
-    parser.add_argument(
-        "--mfu", type=float, default=None, help="Model FLOPs Utilization (0-1)"
-    )
+    parser.add_argument("--flops", type=float, default=None, help="Total compute budget in FLOPs")
+    parser.add_argument("--mfu", type=float, default=None, help="Model FLOPs Utilization (0-1)")
     parser.add_argument("--aspect-ratio", type=int, default=64)
     parser.add_argument("--head-dim", type=int, default=128)
     parser.add_argument("--seq-length", type=int, default=512)

@@ -35,7 +35,7 @@ class KVCache:
     def update(
         self, k: torch.Tensor, v: torch.Tensor, start_pos: int = 0
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        batch_size, seq_len, n_kv_heads, head_dim = k.shape  # B, T, H, D
+        batch_size, seq_len, _n_kv_heads, _head_dim = k.shape  # B, T, H, D
 
         self.k_cache[:batch_size, start_pos : start_pos + seq_len, :, :] = k
         self.v_cache[:batch_size, start_pos : start_pos + seq_len, :, :] = v
@@ -56,10 +56,10 @@ class KVCache:
     def get_cache_tensors(self) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         return self.k_cache, self.v_cache, self.cache_seqlens
 
-    def reset(self):
+    def reset(self) -> None:
         self.cache_seqlens.zero_()
 
-    def clear(self):
+    def clear(self) -> None:
         self.k_cache.zero_()
         self.v_cache.zero_()
         self.cache_seqlens.zero_()

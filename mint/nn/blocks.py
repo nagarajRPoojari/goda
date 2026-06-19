@@ -30,7 +30,9 @@ class GQAGluBlock(nn.Module):
         self.pre_ffn_norm = RMSNorm(embed_dim)
         self.post_ffn_norm = RMSNorm(embed_dim)
 
-        pos_embeddings = RoPE(seq_len=seq_len, head_dim=head_dim, dtype=dtype)
+        pos_embeddings = RoPE(
+            seq_len=seq_len, head_dim=head_dim, rope_base_theta=rope_base_theta, dtype=dtype
+        )
 
         window_size = seq_len // 4 if attention_type == "S" else -1
         self.gqa = GroupedQueryAttention(
@@ -67,5 +69,4 @@ class GQAGluBlock(nn.Module):
             )
         )
         h_ffn = self.pre_ffn_norm(h)
-        h = h + self.post_ffn_norm(self.ffn(h_ffn))
-        return h
+        return h + self.post_ffn_norm(self.ffn(h_ffn))

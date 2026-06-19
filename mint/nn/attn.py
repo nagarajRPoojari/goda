@@ -17,7 +17,7 @@ class GroupedQueryAttention(nn.Module):
         pos_embeddings: PosEmbeddings,
         dtype: torch.dtype,
         window_size: int = -1,
-    ):
+    ) -> None:
         super().__init__()
 
         self.n_heads = n_heads
@@ -36,9 +36,9 @@ class GroupedQueryAttention(nn.Module):
         self.q_norm = RMSNorm(self.head_dim)
         self.k_norm = RMSNorm(self.head_dim)
 
-    def forward(
+    def forward(  # noqa: ANN201
         self,
-        x,
+        x: torch.Tensor,
         kv_cache: KVCache | None = None,
         start_pos: int = 0,
         # optional: we will apply causal on top of a base attn_mask, passed in special cases
@@ -86,7 +86,7 @@ class MultiHeadAttention(nn.Module):
         pos_embeddings: PosEmbeddings,
         dtype: torch.dtype,
         window_size: int = -1,
-    ):
+    ) -> None:
         super().__init__()
 
         self.n_heads = n_heads
@@ -104,9 +104,9 @@ class MultiHeadAttention(nn.Module):
         self.q_norm = RMSNorm(self.head_dim)
         self.k_norm = RMSNorm(self.head_dim)
 
-    def forward(
+    def forward(  # noqa: ANN201
         self,
-        x,
+        x: torch.Tensor,
         kv_cache: KVCache | None = None,
         start_pos: int = 0,
         # optional: we will apply causal on top of a base attn_mask, passed in special cases

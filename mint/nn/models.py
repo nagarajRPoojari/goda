@@ -29,14 +29,12 @@ class GemmaConfig(ModelConfig):
 
 
 class Gemma(nn.Module):
-    def __init__(self, config: GemmaConfig, gradient_checkpointing: bool):
+    def __init__(self, config: GemmaConfig, *, gradient_checkpointing: bool) -> None:
         super().__init__()
         self.config = config
         self.gradient_checkpointing = gradient_checkpointing
 
-        self.tok_embeddings = nn.Embedding(
-            config.vocab_size, config.embed_dim, dtype=config.dtype
-        )
+        self.tok_embeddings = nn.Embedding(config.vocab_size, config.embed_dim, dtype=config.dtype)
 
         self.blocks = nn.ModuleList()
         for i in range(config.n_layers):
@@ -59,9 +57,7 @@ class Gemma(nn.Module):
 
         self.norm = RMSNorm(config.embed_dim)
 
-        self.output = nn.Linear(
-            config.embed_dim, config.vocab_size, bias=False, dtype=config.dtype
-        )
+        self.output = nn.Linear(config.embed_dim, config.vocab_size, bias=False, dtype=config.dtype)
 
         # Optionally tie weights between embeddings and output
         if config.tie_weights:
@@ -101,9 +97,7 @@ class Gemma(nn.Module):
                 )
 
         h = self.norm(h)
-        logits = self.output(h)
-
-        return logits
+        return self.output(h)
 
     def generate(
         self,
@@ -137,14 +131,10 @@ class Gemma(nn.Module):
 
                 if top_p is not None:
                     sorted_logits, sorted_indices = torch.sort(logits, descending=True)
-                    cumulative_probs = torch.cumsum(
-                        torch.softmax(sorted_logits, dim=-1), dim=-1
-                    )
+                    cumulative_probs = torch.cumsum(torch.softmax(sorted_logits, dim=-1), dim=-1)
 
                     sorted_indices_to_remove = cumulative_probs > top_p
-                    sorted_indices_to_remove[..., 1:] = sorted_indices_to_remove[
-                        ..., :-1
-                    ].clone()
+                    sorted_indices_to_remove[..., 1:] = sorted_indices_to_remove[..., :-1].clone()
                     sorted_indices_to_remove[..., 0] = 0
 
                     indices_to_remove = sorted_indices_to_remove.scatter(
@@ -159,14 +149,14 @@ class Gemma(nn.Module):
 
         return input_ids
 
-    def get_num_params(self, non_embedding: bool = True) -> int:
+    def get_num_params(self, *, non_embedding: bool = True) -> int:
         n_params = sum(p.numel() for p in self.parameters())
         if non_embedding:
             n_params -= self.tok_embeddings.weight.numel()
         return n_params
 
 
-def configure_optimizer(
+def configure_optimizer(  # noqa: PLR0912
     model: nn.Module,
     model_cfg: GemmaConfig,
     sched_cfg: SchedulerConfig,

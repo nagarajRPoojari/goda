@@ -47,7 +47,7 @@ class SFTTrainer:
         dataloader: DistributedSFTDataloader,
         device: Device,
         config: SFTConfig,
-        tokenizer: Any = None,
+        tokenizer: Any = None,  # noqa: ANN401
         eval_datasets: list | None = None,
     ) -> None:
         self.model = model
@@ -83,7 +83,7 @@ class SFTTrainer:
             if config.ckpt.resume_from_checkpoint:
                 self._load_pretrained_checkpoint()
 
-    def _load_pretrained_checkpoint(self):
+    def _load_pretrained_checkpoint(self) -> None:
         checkpoint_info = self.checkpointer.load_checkpoint(
             model=self.model,
             optimizer=self.optimizer,
@@ -105,24 +105,18 @@ class SFTTrainer:
                 inf_params.append(name)
 
         if nan_params:
-            logger.error(
-                f"NaN detected in model parameters after loading checkpoint: {nan_params}"
-            )
+            logger.error(f"NaN detected in model parameters after loading checkpoint: {nan_params}")
         if inf_params:
-            logger.error(
-                f"Inf detected in model parameters after loading checkpoint: {inf_params}"
-            )
+            logger.error(f"Inf detected in model parameters after loading checkpoint: {inf_params}")
 
         logger.info("Starting SFT training from step 0")
 
-    def _init_wandb(self) -> Any | None:
+    def _init_wandb(self) -> Any | None:  # noqa: ANN401
         if not self.config.lg.wandb_enabled or not self.is_main_process:
             return None
 
         if importlib.util.find_spec("wandb") is None:
-            raise ImportError(
-                "wandb is enabled in config but the package is not installed."
-            )
+            raise ImportError("wandb is enabled in config but the package is not installed.")
 
         wandb = __import__("wandb")
 
@@ -135,16 +129,14 @@ class SFTTrainer:
                 for key, value in self.config.__dict__.items()
             },
         )
-        logger.info(
-            f"W&B initialized | project={self.config.lg.wandb_project} | run={run.name}"
-        )
+        logger.info(f"W&B initialized | project={self.config.lg.wandb_project} | run={run.name}")
         return run
 
-    def _log_wandb(self, metrics: dict, step: int):
+    def _log_wandb(self, metrics: dict, step: int) -> None:
         if self.wandb_run is not None:
             self.wandb_run.log(metrics, step=step)
 
-    def _run_evaluation(self, step: int, num_examples: int | None = None):
+    def _run_evaluation(self, step: int, num_examples: int | None = None) -> None:
         if self.evaluator is None:
             return
 
@@ -171,7 +163,7 @@ class SFTTrainer:
 
         self._log_wandb(metrics, step=step)
 
-    def train(self):
+    def train(self) -> None:  # noqa: PLR0912, PLR0915
         self.model.train()
         train_start_time = time.perf_counter()
         accumulated_loss = 0.0
@@ -198,9 +190,7 @@ class SFTTrainer:
                 break
 
             step_start_time = time.perf_counter()
-            is_accumulating = (
-                micro_step + 1
-            ) % self.config.gradient_accumulation_steps != 0
+            is_accumulating = (micro_step + 1) % self.config.gradient_accumulation_steps != 0
 
             # Check for NaN/Inf in inputs before forward pass
             if torch.isnan(inputs).any():
@@ -229,9 +219,7 @@ class SFTTrainer:
                     loss = masked_loss / mask_sum.float()
                 else:
                     logger.warning(f"Zero mask sum at step {step}, skipping batch")
-                    loss = torch.tensor(
-                        0.0, device=self.device.device, dtype=torch.float32
-                    )
+                    loss = torch.tensor(0.0, device=self.device.device, dtype=torch.float32)
 
                 loss = loss / self.config.gradient_accumulation_steps
 
@@ -240,7 +228,7 @@ class SFTTrainer:
 
             self.device.backward(loss)
             accumulated_loss += loss.item()
-            micro_step += 1
+            micro_step += 1  # noqa: SIM113
 
             if not is_accumulating:
                 scheduler_metrics = self.scheduler.step(self.optimizer, step)
@@ -257,9 +245,7 @@ class SFTTrainer:
                     * self.process_info["world_size"]
                     * self.config.gradient_accumulation_steps
                 )
-                tokens_per_second = (
-                    tokens_per_step / step_time if step_time > 0 else 0.0
-                )
+                tokens_per_second = tokens_per_step / step_time if step_time > 0 else 0.0
                 elapsed_time = time.perf_counter() - train_start_time
 
                 metrics = {
@@ -270,9 +256,7 @@ class SFTTrainer:
                     "train/elapsed_time_sec": elapsed_time,
                     "scheduler/lr_multiplier": scheduler_metrics["lr_multiplier"],
                     "scheduler/muon_momentum": scheduler_metrics["muon_momentum"],
-                    "scheduler/muon_weight_decay": scheduler_metrics[
-                        "muon_weight_decay"
-                    ],
+                    "scheduler/muon_weight_decay": scheduler_metrics["muon_weight_decay"],
                 }
 
                 if (step + 1) % self.config.eval_every_n_steps == 0 and step > 0:
@@ -283,15 +267,11 @@ class SFTTrainer:
                         for i, sample in enumerate(samples, 1):
                             with torch.no_grad():
                                 input_tensor = (
-                                    sample["input_tokens"]
-                                    .unsqueeze(0)
-                                    .to(self.device.device)
+                                    sample["input_tokens"].unsqueeze(0).to(self.device.device)
                                 )
                                 logits = self.model(input_tensor)
                                 pred_tokens = logits.argmax(dim=-1).squeeze(0)
-                                pred_str = self.tokenizer.decode(
-                                    pred_tokens.unsqueeze(0)
-                                )[0]
+                                pred_str = self.tokenizer.decode(pred_tokens.unsqueeze(0))[0]
 
                             logger.info(f"Sample {i}:")
                             logger.info(f"Input:  ...{sample['input_str'][-100:]}")
@@ -299,19 +279,19 @@ class SFTTrainer:
                             logger.info(f"Pred:   ...{pred_str[-100:]}")
 
                 if (
-                    self.is_main_process
-                    and self.config.ckpt.save_checkpoint_every_n_steps is not None
+                    (
+                        self.is_main_process
+                        and self.config.ckpt.save_checkpoint_every_n_steps is not None
+                    )
+                    and (step + 1) % self.config.ckpt.save_checkpoint_every_n_steps == 0
+                    and step > 0
                 ):
-                    if (
-                        (step + 1) % self.config.ckpt.save_checkpoint_every_n_steps == 0
-                        and step > 0
-                    ):
-                        self.checkpointer.save_checkpoint(
-                            step=step,
-                            model=self.model,
-                            optimizer=self.optimizer,
-                            dataloader_state={},
-                        )
+                    self.checkpointer.save_checkpoint(
+                        step=step,
+                        model=self.model,
+                        optimizer=self.optimizer,
+                        dataloader_state={},
+                    )
 
                 if (step + 1) % self.config.log_every_n_steps == 0:
                     logger.info(
@@ -321,9 +301,7 @@ class SFTTrainer:
                         f"Tokens/s: {metrics['train/tokens_per_second']:.2f} | "
                         f"Memory: {self.device.memory()}"
                     )
-                    self._log_wandb(
-                        {**metrics, "train/memory": self.device.memory()}, step=step
-                    )
+                    self._log_wandb({**metrics, "train/memory": self.device.memory()}, step=step)
 
                 accumulated_loss = 0.0
 

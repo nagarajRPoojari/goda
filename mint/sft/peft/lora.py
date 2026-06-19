@@ -1,5 +1,6 @@
 import math
 
+import torch
 from torch import nn
 
 from .base import Adapter
@@ -8,7 +9,7 @@ from .base import Adapter
 class LoRALinear(nn.Module):
     def __init__(
         self, base_layer: nn.Linear, r: int = 8, alpha: int = 16, dropout: float = 0.05
-    ):
+    ) -> None:
         super().__init__()
         self.base_layer = base_layer
         self.scaling = alpha / r
@@ -24,14 +25,14 @@ class LoRALinear(nn.Module):
         nn.init.kaiming_uniform_(self.lora_A.weight, a=math.sqrt(5))
         nn.init.zeros_(self.lora_B.weight)
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor):  # noqa: ANN201
         base_out = self.base_layer(x)
         lora_out = self.lora_B(self.lora_A(self.dropout(x))) * self.scaling
         return base_out + lora_out
 
 
 class LoRA(Adapter):
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
 
     def apply(
@@ -40,7 +41,7 @@ class LoRA(Adapter):
         target_modules: list[str] | None = None,
         r: int = 8,
         alpha: int = 16,
-    ):
+    ) -> None:
         if target_modules is None:
             target_modules = ["wq", "wv"]
 
@@ -49,11 +50,7 @@ class LoRA(Adapter):
             if any(t in name for t in target_modules) and isinstance(module, nn.Linear):
                 # Parse the tree to safely replace the module in-place
                 parent_path = name.rsplit(".", 1)
-                parent = (
-                    model.get_submodule(parent_path[0])
-                    if len(parent_path) > 1
-                    else model
-                )
+                parent = model.get_submodule(parent_path[0]) if len(parent_path) > 1 else model
                 setattr(parent, parent_path[-1], LoRALinear(module, r, alpha))
 
         # Guarantee only LoRA parameters are tracking gradients
