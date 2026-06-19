@@ -101,7 +101,6 @@ class PreTrainer(BaseTrainer):
     # executed by main process only
     # collect all local dataloader state & save full checkpoint
     def _get_dataloader_state(self) -> dict:
-        """Override base method to collect distributed dataloader state."""
         local_state = self._local_dataloader_state()
         if not self.process_info["distributed"]:
             return local_state
