@@ -178,7 +178,7 @@ class SFTTrainer:
         micro_step = 0
         step = 0
 
-        for step, (inputs, targets, mask) in enumerate(
+        for step, (inputs, targets, loss_mask, _) in enumerate(
             self.dataloader.batch_loader(split="train"), start=0
         ):
             if self.checkpointer.interrupt_requested:
@@ -223,9 +223,9 @@ class SFTTrainer:
                     logits.view(-1, logits.size(-1)), targets.view(-1), reduction="none"
                 )
 
-                mask_sum = mask.sum()
+                mask_sum = loss_mask.sum()
                 if mask_sum > 0:
-                    masked_loss = (loss * mask.view(-1).float()).sum()
+                    masked_loss = (loss * loss_mask.view(-1).float()).sum()
                     loss = masked_loss / mask_sum.float()
                 else:
                     logger.warning(f"Zero mask sum at step {step}, skipping batch")
@@ -253,7 +253,7 @@ class SFTTrainer:
 
                 step_time = time.perf_counter() - step_start_time
                 tokens_per_step = (
-                    mask.sum().item()
+                    loss_mask.sum().item()
                     * self.process_info["world_size"]
                     * self.config.gradient_accumulation_steps
                 )
