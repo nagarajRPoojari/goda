@@ -83,7 +83,6 @@ class BaseTrainer:
         if self.wandb_run is not None:
             self.wandb_run.log(metrics, step=step)
 
-    # Abstract methods to be overridden by subclasses
     def _get_dataloader_state(self) -> dict:
         return {}
 
@@ -126,7 +125,6 @@ class BaseTrainer:
     def _perform_optimization_step(
         self, micro_step: int, step: int, scheduler_metrics: dict | None = None
     ) -> dict:
-        """Perform optimizer step with gradient clipping."""
         if scheduler_metrics is None:
             if not hasattr(self, "scheduler"):
                 raise AttributeError("Scheduler not initialized")
@@ -149,7 +147,6 @@ class BaseTrainer:
         scheduler_metrics: dict,
         train_start_time: float,
     ) -> dict:
-        """Calculate and format training metrics."""
         tokens_per_second = tokens_count / step_time if step_time > 0 else 0.0
         elapsed_time = time.perf_counter() - train_start_time
 
@@ -197,7 +194,6 @@ class BaseTrainer:
         *,
         force: bool = False,
     ) -> None:
-        """Save checkpoint if conditions are met."""
         if not self.is_main_process:
             return
 
@@ -240,7 +236,7 @@ class BaseTrainer:
                 pred_tokens = logits.argmax(dim=-1).squeeze(0)
                 pred_str = self.tokenizer.decode(pred_tokens.unsqueeze(0))[0]
 
-            logger.info(f"Sample {i}:")
-            logger.info(f"Input:  ...{sample['input_str'][-100:]}")
-            logger.info(f"Target: ...{sample['target_str'][-100:]}")
-            logger.info(f"Pred:   ...{pred_str[-100:]}")
+            logger.debug(f"Sample {i}:")
+            logger.debug(f"Input:  ...{sample['input_str'][-100:]}")
+            logger.debug(f"Target: ...{sample['target_str'][-100:]}")
+            logger.debug(f"Pred:   ...{pred_str[-100:]}")
