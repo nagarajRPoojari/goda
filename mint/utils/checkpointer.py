@@ -22,7 +22,7 @@ class CheckpointerConfig(Config):
 
 
 class Checkpointer:
-    def __init__(self, config: CheckpointerConfig, is_main_process: bool):
+    def __init__(self, config: CheckpointerConfig, is_main_process: bool) -> None:
 
         self.checkpoint_dir = Path(config.checkpoint_dir)
         self.save_every_n_steps = config.save_checkpoint_every_n_steps
@@ -37,10 +37,8 @@ class Checkpointer:
 
         signal.signal(signal.SIGINT, self._signal_handler)
 
-    def _signal_handler(self, signum, frame):
-        logger.warning(
-            "\n⚠️  Keyboard interrupt received! Saving checkpoint before exit..."
-        )
+    def _signal_handler(self, signum, frame) -> None:  # noqa: ANN001, ARG002
+        logger.warning("\n⚠️  Keyboard interrupt received! Saving checkpoint before exit...")
         self.interrupt_requested = True
 
     def save_checkpoint(
@@ -50,6 +48,7 @@ class Checkpointer:
         optimizer: Optimizer,
         dataloader_state: dict[str, Any],
         val_loss: float | None = None,
+        *,
         is_best: bool = False,
         force: bool = False,
     ) -> Path | None:
@@ -84,16 +83,14 @@ class Checkpointer:
         if is_best:
             best_path = self.checkpoint_dir / "checkpoint_best.pt"
             torch.save(checkpoint, best_path)
-            logger.info(
-                f" Saved best checkpoint (val_loss={val_loss:.4f}) to {best_path}"
-            )
+            logger.info(f" Saved best checkpoint (val_loss={val_loss:.4f}) to {best_path}")
 
         self._cleanup_old_checkpoints()
         self._save_metadata(step, val_loss)
 
         return step_path
 
-    def _cleanup_old_checkpoints(self):
+    def _cleanup_old_checkpoints(self) -> None:
         step_checkpoints = sorted(
             self.checkpoint_dir.glob("checkpoint_step_*.pt"),
             key=lambda p: int(p.stem.split("_")[-1]),
@@ -104,7 +101,7 @@ class Checkpointer:
                 old_checkpoint.unlink()
                 logger.debug(f"🗑️  Removed old checkpoint: {old_checkpoint.name}")
 
-    def _save_metadata(self, step: int, val_loss: float | None):
+    def _save_metadata(self, step: int, val_loss: float | None) -> None:
         metadata = {
             "last_step": step,
             "last_val_loss": val_loss,
@@ -112,7 +109,7 @@ class Checkpointer:
         }
 
         metadata_path = self.checkpoint_dir / "metadata.json"
-        with open(metadata_path, "w") as f:
+        with Path.open(metadata_path, "w") as f:
             json.dump(metadata, f, indent=2)
 
     def load_checkpoint(
@@ -120,6 +117,7 @@ class Checkpointer:
         model: nn.Module,
         optimizer: Optimizer,
         checkpoint_path: str | None = None,
+        *,
         load_best: bool = False,
     ) -> dict[str, Any]:
 
@@ -162,6 +160,6 @@ class Checkpointer:
     def get_resume_info(self) -> dict[str, Any]:
         metadata_path = self.checkpoint_dir / "metadata.json"
         if metadata_path.exists():
-            with open(metadata_path) as f:
+            with Path.open(metadata_path) as f:
                 return json.load(f)
         return {}
