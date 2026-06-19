@@ -6,8 +6,6 @@ from typing import Any
 import torch
 import torch.distributed as dist
 import torch.nn as nn
-from torch.optim import Optimizer
-
 from mint.config.base import Config
 from mint.data.dataloader import DistributedDataloader
 from mint.eval.base import EvalConfig, Evaluator
@@ -17,6 +15,7 @@ from mint.trainer.scheduler import Scheduler, SchedulerConfig
 from mint.utils.checkpointer import Checkpointer, CheckpointerConfig
 from mint.utils.device import Device
 from mint.utils.logger import LoggerConfig, logger
+from torch.optim import Optimizer
 
 
 @dataclass
@@ -239,6 +238,8 @@ class PreTrainer:
             split="train", resume_state=resume_state
         )
 
+        step_start_time = time.perf_counter()
+
         for inputs, targets, loss_mask, doc_ids in batch_iterator:
             if self.checkpointer.interrupt_requested:
                 if self.is_main_process:
@@ -256,7 +257,9 @@ class PreTrainer:
             if step >= self.config.train_num_steps:
                 break
 
-            step_start_time = time.perf_counter()
+            if micro_step % self.config.gradient_accumulation_steps == 0:
+                step_start_time = time.perf_counter()
+
             is_accumulating = (
                 micro_step + 1
             ) % self.config.gradient_accumulation_steps != 0
@@ -264,7 +267,7 @@ class PreTrainer:
             with self.device.autocast():
                 logits = self.model(inputs, doc_ids=doc_ids)
                 loss = nn.functional.cross_entropy(
-                    logits.view(-1, logits.size(-1)), targets.view(-1)
+                    logits.view(-1, logits.size(-1)), targets.view(-1), reduction="none"
                 )
                 mask_sum = loss_mask.sum()
                 if mask_sum > 0:
