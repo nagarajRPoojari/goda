@@ -81,8 +81,11 @@ class Tokenizer:
         batch_list = batch.tolist()
 
         if skip_special_tokens:
-            special = {self.bos_token, self.eos_token, self.pad_token}
+            special = {self.bos_token, self.eos_token, self.pad_token, *self.special_tokens.values()}
             batch_list = [[t for t in seq if t not in special] for seq in batch_list]
+
+        max_valid_token = self.encoding.max_token_value
+        batch_list = [[t for t in seq if t <= max_valid_token] for seq in batch_list]
 
         return self.encoding.decode_batch(batch_list)
 
