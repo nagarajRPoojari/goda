@@ -36,16 +36,16 @@ class DownloadCoordinator:
         self.download_complete = Value("i", 0)
         self.lock = Lock()
 
-    def increment_downloaded(self):
+    def increment_downloaded(self):  # noqa: ANN201
         with self.lock:
             self.downloaded_count.value += 1
             return self.downloaded_count.value
 
-    def set_total_shards(self, total: int):
+    def set_total_shards(self, total: int) -> None:
         with self.lock:
             self.total_shards.value = total
 
-    def mark_complete(self):
+    def mark_complete(self) -> None:
         with self.lock:
             self.download_complete.value = 1
 
@@ -72,6 +72,7 @@ async def download_file_async(
     destination: Path,
     shard_idx: int,
     total_shards: int,
+    *,
     show_progress: bool = True,
 ) -> bool:
     try:
@@ -120,7 +121,7 @@ def download_file_hf_sync(repo_id: str, filename: str, destination: Path) -> boo
 
         if Path(downloaded_path) != destination:
             Path(downloaded_path).rename(destination)
-        return True
+        return True  # noqa: TRY300
     except Exception as e:
         logger.info(f"  ✗ Failed to download {filename}: {e}")
         return False
@@ -135,6 +136,7 @@ async def download_shard(
     shard_pattern: str,
     coordinator: DownloadCoordinator,
     total_shards: int,
+    *,
     use_hf: bool = False,
 ) -> None:
     shard_name = shard_pattern.format(shard_idx)
@@ -209,7 +211,7 @@ async def download_all_shards(
         # Create semaphore to limit concurrent downloads
         semaphore = asyncio.Semaphore(max_concurrent)
 
-        async def download_with_semaphore(shard_idx: int):
+        async def download_with_semaphore(shard_idx: int) -> None:
             async with semaphore:
                 await download_shard(
                     session,
@@ -277,6 +279,7 @@ def start_download_and_training(
     base_url: str = "https://huggingface.co/datasets/karpathy/climbmix-400b-shuffle/resolve/main",
     shard_pattern: str = "shard_{:05d}.parquet",
     max_concurrent: int = 3,
+    *,
     start_training: bool = False,
 ) -> tuple[DownloadCoordinator, mp.Process]:
 

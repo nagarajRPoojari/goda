@@ -12,7 +12,7 @@ def calculate_hyperparams(
     head_dim: int,
     seq_length: int,
     param_data_ratio: float,
-    B_ref: int,
+    B_ref: int,  # noqa: N803
     lr_ref: float,
     wd_ref: float,
     vocab_size: int = 50258,
@@ -25,7 +25,7 @@ def calculate_hyperparams(
     hidden_dim = 4 * embed_dim
 
     # Calculate scaling params (transformer matrices + lm_head)
-    def get_scaling_params(depth):
+    def get_scaling_params(depth):  # noqa: ANN202
         model_dim = depth * aspect_ratio
         model_dim = ((model_dim + head_dim - 1) // head_dim) * head_dim
         return 4 * depth * model_dim * model_dim
@@ -79,7 +79,7 @@ def calculate_hyperparams(
     }
 
 
-def generate_config_yaml(params, output_file):
+def generate_config_yaml(params, output_file) -> None:
     """Generate YAML config file from calculated parameters."""
     # Convert batch_size from tokens to sequences
     batch_size_sequences = params["batch_size"] // params["seq_length"]
