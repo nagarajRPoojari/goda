@@ -1,5 +1,7 @@
 import random
 import re
+import urllib.request
+from pathlib import Path
 from typing import Any, Literal
 
 from mint.data.datasets.base import SFTEvalDataset, SFTTrainDataset
@@ -38,7 +40,7 @@ class SpellingBee(SFTTrainDataset, SFTEvalDataset):
 
     def __getitem__(self, index: int) -> dict[str, Any]:
         seed = index if self.split == "train" else TEST_SEED_OFFSET + index
-        rng = random.Random(seed)
+        rng = random.Random(seed)  # noqa: S311
 
         word = rng.choice(self.words)
         letter = rng.choice(word) if rng.random() < 0.9 else rng.choice(LETTERS)
@@ -63,14 +65,12 @@ class SpellingBee(SFTTrainDataset, SFTEvalDataset):
         return pred_num == ref_num
 
     def _load_words(self) -> list:
-        import os
-        import urllib.request
 
-        cache_path = "/tmp/words_alpha.txt"
-        if not os.path.exists(cache_path):
-            urllib.request.urlretrieve(WORD_LIST_URL, cache_path)
+        cache_path = "/tmp/words_alpha.txt"  # noqa: S108
+        if not Path.exists(cache_path):
+            urllib.request.urlretrieve(WORD_LIST_URL, cache_path)  # noqa: S310
 
-        with open(cache_path) as f:
+        with Path.open(cache_path) as f:
             return [line.strip() for line in f]
 
     def _create_user_message(self, rng: random.Random, word: str, letter: str) -> str:
@@ -121,7 +121,7 @@ class SimpleSpelling(SFTTrainDataset):
 
     def __getitem__(self, index: int) -> dict[str, Any]:
         seed = index if self.split == "train" else TEST_SEED_OFFSET + index
-        rng = random.Random(seed)
+        rng = random.Random(seed)  # noqa: S311
         word = rng.choice(self.words)
 
         return {
@@ -132,16 +132,14 @@ class SimpleSpelling(SFTTrainDataset):
         }
 
     def _load_words(self) -> list:
-        import os
-        import urllib.request
 
-        cache_path = "/tmp/words_alpha.txt"
-        if not os.path.exists(cache_path):
-            urllib.request.urlretrieve(WORD_LIST_URL, cache_path)
+        cache_path = "/tmp/words_alpha.txt"  # noqa: S108
+        if not Path.exists(cache_path):
+            urllib.request.urlretrieve(WORD_LIST_URL, cache_path)  # noqa: S310
 
-        with open(cache_path) as f:
+        with Path.open(cache_path) as f:
             words = [line.strip() for line in f]
 
-        rng = random.Random(42)
+        rng = random.Random(42)  # noqa: S311
         rng.shuffle(words)
         return words

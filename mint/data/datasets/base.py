@@ -38,6 +38,8 @@ class SFTEvalDataset(SFTDataset):
 
 def build_mc_prompt(question: str, letters: tuple[str], choices: list[str]) -> str:
     query = f"Multiple Choice question: {question}\n"
-    query += "".join([f"- {choice}={letter}\n" for letter, choice in zip(letters, choices)])
+    query += "".join(
+        [f"- {choice}={letter}\n" for letter, choice in zip(letters, choices, strict=True)]
+    )
     query += "\nRespond only with the letter of the correct answer."
     return query
