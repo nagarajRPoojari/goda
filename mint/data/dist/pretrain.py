@@ -41,14 +41,19 @@ class DistributedBOSBestfitPretrainDataloader(DistributedDataloader):
         use_cuda: bool = device.is_cuda
         
         self.row_buffer = torch.empty((self.B, self.row_capacity), dtype=torch.long)
-        self.cpu_buffer = torch.empty(2 * self.B * self.T, dtype=torch.long, pin_memory=use_cuda)
-        self.gpu_buffer = torch.empty(2 * self.B * self.T, dtype=torch.long, device=device.device)
+        self.row_doc_ids = torch.empty((self.B, self.row_capacity), dtype=torch.long)
         
-        self.cpu_inputs = self.cpu_buffer[:self.B * self.T].view(self.B, self.T)
-        self.cpu_targets = self.cpu_buffer[self.B * self.T:].view(self.B, self.T)
+        # CPU pinned memory layout
+        self.cpu_inputs = torch.empty((self.B, self.T), dtype=torch.long, pin_memory=use_cuda)
+        self.cpu_targets = torch.empty((self.B, self.T), dtype=torch.long, pin_memory=use_cuda)
+        self.cpu_loss_mask = torch.empty((self.B, self.T), dtype=torch.float32, pin_memory=use_cuda)
+        self.cpu_doc_ids = torch.empty((self.B, self.T), dtype=torch.long, pin_memory=use_cuda)
 
-        self.inputs = self.gpu_buffer[:self.B * self.T].view(self.B, self.T)
-        self.targets = self.gpu_buffer[self.B * self.T:].view(self.B, self.T)
+        # GPU Destination tensors
+        self.inputs = torch.empty((self.B, self.T), dtype=torch.long, device=device.device)
+        self.targets = torch.empty((self.B, self.T), dtype=torch.long, device=device.device)
+        self.loss_mask = torch.empty((self.B, self.T), dtype=torch.float32, device=device.device)
+        self.doc_ids = torch.empty((self.B, self.T), dtype=torch.long, device=device.device)
         
         self.current_shard_idx = 0
         self.current_rg_idx = self.rank
@@ -159,7 +164,7 @@ class DistributedBOSBestfitPretrainDataloader(DistributedDataloader):
         token_lists = self.tokenizer.encode_to_list(doc_batch, add_bos=True, add_eos=False, padding=False)
         doc_buffer.extend(token_lists)
     
-    def batch_loader(self, split: str = "train", resume_state: dict | None = None) -> Generator[Tuple[torch.Tensor, torch.Tensor], None, None]:
+    def batch_loader(self, split: str = "train", resume_state: dict | None = None) -> Generator[Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]]:
         # Restore state if resuming
         if resume_state and split == "train":
             start_shard_idx = resume_state.get('shard_idx', 0)
@@ -193,6 +198,7 @@ class DistributedBOSBestfitPretrainDataloader(DistributedDataloader):
         while True:
             for row_idx in range(self.B):
                 pos = 0
+                global_doc_id = 0
                 
                 while pos < self.row_capacity:
                     while len(doc_buffer) < self.buffer_size:
@@ -212,19 +218,36 @@ class DistributedBOSBestfitPretrainDataloader(DistributedDataloader):
                         doc = doc_buffer.pop(best_idx)
                         doc_len = len(doc)
                         self.row_buffer[row_idx, pos:pos + doc_len] = torch.tensor(doc, dtype=torch.long)
+                        
+                        self.row_doc_ids[row_idx, pos:pos + doc_len] = global_doc_id
+                        global_doc_id += 1
+
                         pos += doc_len
                     else:
                         shortest_idx = min(range(len(doc_buffer)), key=lambda i: len(doc_buffer[i]))
                         doc = doc_buffer.pop(shortest_idx)
-                        self.row_buffer[row_idx, pos:pos + remaining] = torch.tensor(doc[:remaining], dtype=torch.long)
+                        self.row_doc_ids[row_idx, pos:pos + remaining] = torch.tensor(doc[:remaining], dtype=torch.long)
+                        
+                        self.doc_ids[row_idx, pos:pos + doc_len] = global_doc_id
+                        global_doc_id += 1                        
+                        
                         pos += remaining
             
             self.cpu_inputs.copy_(self.row_buffer[:, :-1])
             self.cpu_targets.copy_(self.row_buffer[:, 1:])
+
+            input_doc_ids = self.row_doc_ids[:, :-1]
+            target_doc_ids = self.row_doc_ids[:, 1:]
+
+            self.cpu_loss_mask.copy_(input_doc_ids == target_doc_ids)
+            self.cpu_doc_ids.copy_(input_doc_ids)
             
-            self.gpu_buffer.copy_(self.cpu_buffer, non_blocking=self.device.is_cuda)
+            self.inputs.copy_(self.cpu_inputs, non_blocking=self.device.is_cuda)
+            self.targets.copy_(self.cpu_targets, non_blocking=self.device.is_cuda)
+            self.doc_ids.copy_(self.cpu_doc_ids, non_blocking=self.device.is_cuda)
+            self.loss_mask.copy_(self.cpu_loss_mask, non_blocking=self.device.is_cuda)
             
-            yield self.inputs, self.targets
+            yield self.inputs, self.targets, self.loss_mask, self.doc_ids
     
     def get_state(self) -> dict:
         return {
