@@ -1,8 +1,9 @@
 import io
 import signal
 import sys
+from collections.abc import Generator
 from contextlib import contextmanager
-from typing import NamedTuple
+from typing import Any, NamedTuple, Never
 
 
 class ExecutionResult(NamedTuple):
@@ -11,16 +12,16 @@ class ExecutionResult(NamedTuple):
     error: str = ""
 
 
-class TimeoutException(Exception):
+class TimeoutHandlerError(Exception):
     pass
 
 
-def timeout_handler(signum, frame):
-    raise TimeoutException("Code execution timed out")
+def timeout_handler(signum, frame) -> Never:
+    raise TimeoutHandlerError("Code execution timed out")
 
 
 @contextmanager
-def time_limit(seconds: int):
+def time_limit(seconds: int) -> Generator[Any, Any, Any]:
     signal.signal(signal.SIGALRM, timeout_handler)
     signal.alarm(seconds)
     try:
@@ -44,30 +45,22 @@ def execute_code(code: str, timeout: int = 5) -> ExecutionResult:
             exec_globals = {
                 "__builtins__": __builtins__,
             }
-            exec(code, exec_globals)
+            exec(code, exec_globals)  # noqa: S102
 
         output = redirected_output.getvalue()
         error = redirected_error.getvalue()
 
         success = len(error) == 0
 
-        return ExecutionResult(
-            success=success,
-            output=output,
-            error=error
-        )
+        return ExecutionResult(success=success, output=output, error=error)
 
-    except TimeoutException as e:
+    except TimeoutHandlerError as e:
         return ExecutionResult(
-            success=False,
-            output=redirected_output.getvalue(),
-            error=f"Timeout: {e!s}"
+            success=False, output=redirected_output.getvalue(), error=f"Timeout: {e!s}"
         )
     except Exception as e:
         return ExecutionResult(
-            success=False,
-            output=redirected_output.getvalue(),
-            error=f"{type(e).__name__}: {e!s}"
+            success=False, output=redirected_output.getvalue(), error=f"{type(e).__name__}: {e!s}"
         )
     finally:
         sys.stdout = old_stdout
