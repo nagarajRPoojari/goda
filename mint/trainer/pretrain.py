@@ -239,7 +239,7 @@ class PreTrainer:
             split="train", resume_state=resume_state
         )
 
-        for inputs, targets in batch_iterator:
+        for inputs, targets, loss_mask, doc_ids in batch_iterator:
             if self.checkpointer.interrupt_requested:
                 if self.is_main_process:
                     logger.warning("Saving checkpoint due to keyboard interrupt...")
@@ -262,10 +262,19 @@ class PreTrainer:
             ) % self.config.gradient_accumulation_steps != 0
 
             with self.device.autocast():
-                logits = self.model(inputs)
+                logits = self.model(inputs, doc_ids=doc_ids)
                 loss = nn.functional.cross_entropy(
                     logits.view(-1, logits.size(-1)), targets.view(-1)
                 )
+                mask_sum = loss_mask.sum()
+                if mask_sum > 0:
+                    masked_loss = (loss * loss_mask.view(-1).float()).sum()
+                    loss = masked_loss / mask_sum.float()
+                else:
+                    logger.warning(f"Zero mask sum at step {step}, skipping batch")
+                    loss = torch.tensor(
+                        0.0, device=self.device.device, dtype=torch.float32
+                    )
                 loss = loss / self.config.gradient_accumulation_steps
 
             if micro_step % self.config.gradient_accumulation_steps == 0:
