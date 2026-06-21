@@ -1,0 +1,79 @@
+[model]
+embed_dim = 512
+hidden_dim = 2048
+seq_length = 512
+vocab_size = 50267
+n_layers = 2
+n_heads = 4
+n_kv_heads = 4
+head_dim = 128
+rope_base_theta = 100000
+tie_weights = true
+
+
+
+[train]
+mixed_precision = true
+use_meta_device = true
+compile_model = false
+train_num_steps = 10
+grad_clip = 1.2
+log_every_n_steps = 1
+eval_every_n_steps = 100
+eval_num_steps = 10
+core_eval_every_n_step = 500
+gradient_accumulation_steps = 8
+
+[train.lg]
+wandb_enabled = true
+wandb_project = "goda"
+wandb_run_name = ""
+wandb_entity = ""
+
+
+[train.ckpt]
+checkpoint_dir = "checkpoints"
+save_checkpoint_every_n_steps = 200
+keep_last_n_checkpoints = 1
+resume_from_checkpoint = false
+load_best_checkpoint = false
+
+
+[train.sched]
+unembedding_lr = 0.0004
+embedding_lr = 0.002
+matrix_lr = 0.0002
+scalar_lr = 0.05
+warmup_steps = 5
+muon_momentum_warmup_steps = 400
+muon_momentum_start = 0.85
+muon_momentum_peak = 0.97
+muon_momentum_final = 0.9
+warmdown_ratio = 0.65
+final_lr_frac = 0.1
+weight_decay = 0.0
+weight_decay_lm_head = 0.01
+weight_decay_embedding = 0.001
+weight_decay_scalar = 0.05
+scalar_lr_multiplier = 0.01
+
+
+[optim]
+muon_momentum = 0.95
+muon_beta2 = 0.9
+muon_ns_steps = 5
+adamw_beta1 = 0.8
+adamw_beta2_lm_head = 0.96
+adamw_beta2_embedding = 0.995
+adamw_beta2_scalar = 0.95
+adamw_eps = 1.0e-10
+
+[device]
+mixed_precision = false
+
+[dl]
+data_dir = "data/climbmix"
+batch_size = 64
+buffer_size = 1000
+tokenizer_batch_size = 128
+seq_length = 128
