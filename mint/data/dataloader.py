@@ -32,7 +32,7 @@ class DistributedDataloader(Sampler, ABC):
         *args: Any,  # noqa: ANN401
         **kwargs: Any,  # noqa: ANN401
     ) -> None:
-        super().__init__(*args, **kwargs)
+        super().__init__()
         self.device = device
         self.data_dir = Path(data_dir)
         self.B = batch_size

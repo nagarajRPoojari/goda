@@ -5,8 +5,8 @@ import torch
 import torch.nn.functional as F  # noqa: N812
 from torch import nn
 
-from kernels.flash_attn_mqa import (
-    FlashAttentionKernel,  # pyright: ignore[reportMissingImports]
+from kernels_ import (
+    FlashAttentionMQAKernel,  # pyright: ignore[reportMissingImports]
 )
 from mint.kvcache.base import KVCache
 
@@ -56,7 +56,7 @@ class FlashAttention(nn.Module):
         if not torch.cuda.is_available():
             return None
         try:
-            return FlashAttentionKernel
+            return FlashAttentionMQAKernel
         except Exception:
             return None
 
@@ -68,7 +68,9 @@ class FlashAttention(nn.Module):
             if major != 9:
                 return None
             os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] = "1"
-            from kernels import get_kernel  # pyright: ignore[reportMissingImports]  # noqa: PLC0415
+            from kernels_ import (
+                get_kernel,  # pyright: ignore[reportMissingImports]
+            )
 
             return get_kernel("varunneal/flash-attention-3").flash_attn_interface
         except Exception:

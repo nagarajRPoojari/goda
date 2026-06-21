@@ -465,7 +465,7 @@ def _attn_forward_kernel(
     tl.store(block_O_ptr, block_O.to(O.type.element_ty))
 
 
-class FlashAttentionKernel(torch.autograd.Function):
+class FlashAttentionMQAKernel(torch.autograd.Function):
     @staticmethod
     def forward(ctx, Q, K, V, causal, tau) -> torch.Tensor:
         HEAD_DIM_Q, HEAD_DIM_K, HEAD_DIM_V = Q.shape[-1], K.shape[-1], V.shape[-1]
@@ -650,7 +650,7 @@ def test_op(BATCH_SIZE, NUM_HEADS, SEQ_LEN, HEAD_DIM, causal, dtype=torch.float1
         ref_dK, K.grad = K.grad.clone(), None  # type: ignore
         ref_dQ, Q.grad = Q.grad.clone(), None  # type: ignore
 
-        tri_out = FlashAttentionKernel.apply(Q, K, V, causal, softmax_scale).half()
+        tri_out = FlashAttentionMQAKernel.apply(Q, K, V, causal, softmax_scale).half()
         tri_out.backward(dO)
         tri_dV, V.grad = V.grad.clone(), None  # type: ignore
         tri_dK, K.grad = K.grad.clone(), None  # type: ignore
@@ -665,7 +665,7 @@ def test_op(BATCH_SIZE, NUM_HEADS, SEQ_LEN, HEAD_DIM, causal, dtype=torch.float1
 
     # Benchmark (always runs)
     ms = triton.testing.do_bench(
-        lambda: FlashAttentionKernel.apply(Q, K, V, causal, softmax_scale).half().backward(dO)
+        lambda: FlashAttentionMQAKernel.apply(Q, K, V, causal, softmax_scale).half().backward(dO)
     )
 
     flops = 2.5 * 4 * BATCH_SIZE * NUM_HEADS * SEQ_LEN * SEQ_LEN * HEAD_DIM
