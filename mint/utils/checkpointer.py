@@ -112,6 +112,36 @@ class Checkpointer:
         with Path(metadata_path).open("w") as f:
             json.dump(metadata, f, indent=2)
 
+    @classmethod
+    def load_model(  # noqa: ANN206
+        cls,
+        model: nn.Module,
+        checkpoint_path: str | None = None,
+    ):
+        if checkpoint_path is not None:
+            path = Path(checkpoint_path)
+        else:
+            raise ValueError("invalid checkpoint path")
+        if not path.exists():
+            logger.warning(f"Checkpoint not found: {path}")
+            return {"step": 0, "dataloader_state": {}}
+
+        logger.info(f"oading checkpoint from {path}")
+        checkpoint = torch.load(path, map_location="cpu")
+
+        model.load_state_dict(checkpoint["model_state_dict"])
+
+        logger.info(
+            f"Loaded checkpoint from step {checkpoint['step']} "
+            f"(val_loss={checkpoint.get('val_loss', 'N/A')})"
+        )
+
+        return {
+            "step": checkpoint["step"],
+            "dataloader_state": checkpoint.get("dataloader_state", {}),
+            "val_loss": checkpoint.get("val_loss"),
+        }
+
     def load_checkpoint(
         self,
         model: nn.Module,

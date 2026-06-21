@@ -102,9 +102,7 @@ def _attn_backward_dK_dV(
 
     # note: i am gonna load Q as transposed to avoid further unnessary transpose ops
     block_Qt_ptr = Q + offset_Q_T[None, :] * stride_seq + offset_D[:, None] * stride_dim
-    block_dO_ptr = (
-        dO + offset_Q_T[:, None] * stride_seq + offset_D[None, :] * stride_dim
-    )
+    block_dO_ptr = dO + offset_Q_T[:, None] * stride_seq + offset_D[None, :] * stride_dim
 
     curr_offset_Q_T = 0
     for q_i in range(SEQ_LEN // BLOCK_SIZE_Q):
@@ -148,14 +146,10 @@ def _attn_backward_dK_dV(
         block_dO_ptr += BLOCK_SIZE_Q * stride_seq
 
     # SMEM to GMEM after full accumulation
-    block_dV_ptr = (
-        dV + offset_KV_T[:, None] * stride_seq + offset_D[None, :] * stride_dim
-    )
+    block_dV_ptr = dV + offset_KV_T[:, None] * stride_seq + offset_D[None, :] * stride_dim
     tl.store(block_dV_ptr, block_dV)
 
-    block_dK_ptr = (
-        dK + offset_KV_T[:, None] * stride_seq + offset_D[None, :] * stride_dim
-    )
+    block_dK_ptr = dK + offset_KV_T[:, None] * stride_seq + offset_D[None, :] * stride_dim
     tl.store(block_dK_ptr, block_dK)
 
 
@@ -208,13 +202,9 @@ def _attn_backward_dQ(
     start_q = index_KV_block * BLOCK_SIZE_Q
     offset_Q_T = start_q + tl.arange(0, BLOCK_SIZE_Q)
 
-    block_Q = tl.load(
-        Q + offset_Q_T[:, None] * stride_seq + offset_D[None, :] * stride_dim
-    )
+    block_Q = tl.load(Q + offset_Q_T[:, None] * stride_seq + offset_D[None, :] * stride_dim)
     block_dQ = tl.zeros([BLOCK_SIZE_Q, HEAD_DIM], dtype=tl.float32)
-    block_dO = tl.load(
-        dO + offset_Q_T[:, None] * stride_seq + offset_D[None, :] * stride_dim
-    )
+    block_dO = tl.load(dO + offset_Q_T[:, None] * stride_seq + offset_D[None, :] * stride_dim)
 
     block_M = tl.load(M + offset_Q_T)
     block_M = block_M[:, None]
@@ -222,12 +212,8 @@ def _attn_backward_dQ(
     offset_KV_T = tl.arange(0, BLOCK_SIZE_KV)
 
     # We access the K and V as transposed blocks
-    block_Kt_ptr = (
-        K + offset_KV_T[None, :] * stride_seq + offset_D[:, None] * stride_dim
-    )
-    block_Vt_ptr = (
-        V + offset_KV_T[None, :] * stride_seq + offset_D[:, None] * stride_dim
-    )
+    block_Kt_ptr = K + offset_KV_T[None, :] * stride_seq + offset_D[:, None] * stride_dim
+    block_Vt_ptr = V + offset_KV_T[None, :] * stride_seq + offset_D[:, None] * stride_dim
 
     Di = tl.load(D + offset_Q_T)
 
@@ -256,9 +242,7 @@ def _attn_backward_dQ(
         block_Kt_ptr += BLOCK_SIZE_KV * stride_seq
         block_Vt_ptr += BLOCK_SIZE_KV * stride_seq
 
-    block_dQ_ptr = (
-        dQ + offset_Q_T[:, None] * stride_seq + offset_D[None, :] * stride_dim
-    )
+    block_dQ_ptr = dQ + offset_Q_T[:, None] * stride_seq + offset_D[None, :] * stride_dim
     tl.store(block_dQ_ptr, block_dQ)
 
 
@@ -407,9 +391,7 @@ def _attn_forward_kernel(
     index_Q_batch = index_Q_batch_head // NUM_HEADS
     index_Q_head = index_Q_batch_head % NUM_HEADS
 
-    offset_QKV_T = (
-        index_Q_batch.to(tl.int64) * stride_Q_B + index_Q_head.to(tl.int64) * stride_Q_H
-    )
+    offset_QKV_T = index_Q_batch.to(tl.int64) * stride_Q_B + index_Q_head.to(tl.int64) * stride_Q_H
 
     block_Q_ptr = tl.make_block_ptr(
         base=Q + offset_QKV_T,  # [None, None, 0, 0]
@@ -525,7 +507,7 @@ def _attn_forward_kernel(
 
 # torch treats autograd functions just like derivable funcs,
 # passes dO and expects dQ, dK, dV
-class FlashAttention(torch.autograd.Function):
+class FlashAttentionGQAKernel(torch.autograd.Function):
     # conventions:
     # D -> head dimension
     # H -> number of heads
@@ -548,9 +530,7 @@ class FlashAttention(torch.autograd.Function):
         grid = (triton.cdiv(SEQ_LEN, BLOCK_SIZE_Q), BATCH_SIZE * NUM_HEADS)
 
         # M is logSumExp: TODO: exact formula for logSumExp
-        M = torch.empty(
-            (BATCH_SIZE, NUM_HEADS, SEQ_LEN), device=Q.device, dtype=torch.float32
-        )
+        M = torch.empty((BATCH_SIZE, NUM_HEADS, SEQ_LEN), device=Q.device, dtype=torch.float32)
 
         _attn_forward_kernel[grid](  # type: ignore
             Q=Q,
@@ -680,23 +660,17 @@ class FlashAttention(torch.autograd.Function):
 
 def test_op(BATCH_SIZE, NUM_HEADS, SEQ_LEN, HEAD_DIM, causal, dtype=torch.float16):
     Q = (
-        torch.empty(
-            (BATCH_SIZE, NUM_HEADS, SEQ_LEN, HEAD_DIM), dtype=dtype, device="cuda"
-        )
+        torch.empty((BATCH_SIZE, NUM_HEADS, SEQ_LEN, HEAD_DIM), dtype=dtype, device="cuda")
         .normal_(mean=0.0, std=0.5)
         .requires_grad_()
     )
     K = (
-        torch.empty(
-            (BATCH_SIZE, NUM_HEADS, SEQ_LEN, HEAD_DIM), dtype=dtype, device="cuda"
-        )
+        torch.empty((BATCH_SIZE, NUM_HEADS, SEQ_LEN, HEAD_DIM), dtype=dtype, device="cuda")
         .normal_(mean=0.0, std=0.5)
         .requires_grad_()
     )
     V = (
-        torch.empty(
-            (BATCH_SIZE, NUM_HEADS, SEQ_LEN, HEAD_DIM), dtype=dtype, device="cuda"
-        )
+        torch.empty((BATCH_SIZE, NUM_HEADS, SEQ_LEN, HEAD_DIM), dtype=dtype, device="cuda")
         .normal_(mean=0.0, std=0.5)
         .requires_grad_()
     )
@@ -717,7 +691,7 @@ def test_op(BATCH_SIZE, NUM_HEADS, SEQ_LEN, HEAD_DIM, causal, dtype=torch.float1
     ref_dQ, Q.grad = Q.grad.clone(), None  # type: ignore
 
     # triton implementation
-    tri_out = FlashAttention.apply(Q, K, V, causal, softmax_scale).half()
+    tri_out = FlashAttentionGQAKernel.apply(Q, K, V, causal, softmax_scale).half()
     tri_out.backward(dO)
     tri_dV, V.grad = V.grad.clone(), None  # type: ignore
     tri_dK, K.grad = K.grad.clone(), None  # type: ignore
@@ -733,7 +707,7 @@ def test_op(BATCH_SIZE, NUM_HEADS, SEQ_LEN, HEAD_DIM, causal, dtype=torch.float1
 
     # Benchmark
     ms = triton.testing.do_bench(
-        lambda: FlashAttention.apply(Q, K, V, causal, softmax_scale).half().backward(dO)
+        lambda: FlashAttentionGQAKernel.apply(Q, K, V, causal, softmax_scale).half().backward(dO)
     )
 
     # FLOPs for attention: 2 * B * H * T^2 * D (QK^T) + 2 * B * H * T^2 * D (softmax*V) = 4*B*H*T^2*D per pass

@@ -194,12 +194,11 @@ class PreTrainer(BaseTrainer):
 
             if micro_step % self.config.gradient_accumulation_steps == 0:
                 step_start_time = time.perf_counter()
+            if micro_step % self.config.gradient_accumulation_steps == 0:
+                self.optimizer.zero_grad()
 
             is_accumulating = (micro_step + 1) % self.config.gradient_accumulation_steps != 0
             loss = self._compute_loss(inputs, targets, loss_mask, step, doc_ids)
-
-            if micro_step % self.config.gradient_accumulation_steps == 0:
-                self.optimizer.zero_grad()
 
             self.device.backward(loss)
             accumulated_loss += loss.item()
