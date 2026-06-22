@@ -9,7 +9,7 @@ from mint.data.dataloader import DataloaderConfig
 from mint.data.dist.dpo import DistributedDPODataloader
 from mint.nn.models import Gemma, GemmaConfig, configure_optimizer
 from mint.optim.muon_adamw import MuonAdamWConfig
-from mint.tokenizer import Tokenizer
+from mint.tokenizer import TikTokenizer
 from mint.trainer.dpo import DPOConfig, DPOTrainer
 from mint.utils.checkpointer import Checkpointer
 from mint.utils.device import Device, DeviceConfig
@@ -31,18 +31,6 @@ def main() -> None:
         "--config", type=str, default="config_d12.yaml", help="Path to config YAML file"
     )
     parser.add_argument(
-        "--min-shards",
-        type=int,
-        default=2,
-        help="Minimum shards required before starting training",
-    )
-    parser.add_argument(
-        "--max-shards-to-wait",
-        type=int,
-        default=-1,
-        help="Maximum shards to wait for (-1 = wait indefinitely)",
-    )
-    parser.add_argument(
         "--ref-model",
         type=str,
         default=-1,
@@ -50,7 +38,7 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    tokenizer = Tokenizer()
+    tokenizer = TikTokenizer()
     config: MetaConfig = MetaConfig.from_toml(toml_path=args.config)
 
     if config.model.vocab_size != tokenizer.vocab_size:
@@ -98,8 +86,6 @@ def main() -> None:
         config=config.dl,
         tokenizer=tokenizer,
         filename="hh_rlhf_formatted.jsonl",
-        min_shards_required=args.min_shards,
-        max_shards_to_wait=args.max_shards_to_wait,
     )
 
     logger.info(f"Device: {device}")

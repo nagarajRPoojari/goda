@@ -9,7 +9,7 @@ from mint.data.dataloader import DataloaderConfig, DistributedDataloader
 from mint.data.dist.pretrain import DistributedBOSBestfitPretrainDataloader
 from mint.nn.models import Gemma, GemmaConfig, configure_optimizer
 from mint.optim.muon_adamw import MuonAdamWConfig
-from mint.tokenizer import Tokenizer
+from mint.tokenizer import TikTokenizer
 from mint.trainer.pretrain import PretrainConfig, PreTrainer
 from mint.utils.device import Device, DeviceConfig
 from mint.utils.logger import logger
@@ -43,7 +43,7 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    tokenizer = Tokenizer()
+    tokenizer = TikTokenizer()
     config: MetaConfig = MetaConfig.from_toml(toml_path=args.config)
 
     if config.model.vocab_size != tokenizer.vocab_size:

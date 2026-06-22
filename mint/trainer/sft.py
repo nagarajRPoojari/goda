@@ -144,11 +144,13 @@ class SFTTrainer(BaseTrainer):
         train_start_time = time.perf_counter()
         accumulated_loss = 0.0
         micro_step = 0
-        step = 0
 
-        for step, (inputs, targets, loss_mask, _) in enumerate(
-            self.dataloader.batch_loader(split="train"), start=0
-        ):
+        batch_iterator = self.dataloader.batch_loader(split="train")
+        step_start_time = time.perf_counter()
+
+        for inputs, targets, loss_mask, _ in batch_iterator:
+            step = micro_step // self.config.gradient_accumulation_steps
+            
             # Handle interrupt
             if (
                 self._handle_interrupt(step, self.checkpointer)
@@ -169,6 +171,8 @@ class SFTTrainer(BaseTrainer):
             micro_step += 1  # noqa: SIM113
 
             if not is_accumulating:
+                step = micro_step // self.config.gradient_accumulation_steps
+                
                 scheduler_metrics = self.scheduler.step(self.optimizer, step)
                 self._perform_optimization_step(micro_step, step, scheduler_metrics)
 
@@ -187,13 +191,14 @@ class SFTTrainer(BaseTrainer):
                     train_start_time,
                 )
 
-                if (step + 1) % self.config.eval_every_n_steps == 0 and step > 0:
-                    self._run_evaluation(step=step + 1, num_examples=100)
-                    self._log_sample_predictions(step + 1)
+                if step % self.config.eval_every_n_steps == 0 and step > 0:
+                    self._run_evaluation(step=step, num_examples=100)
+                    self._log_sample_predictions(step)
 
-                self._maybe_save_checkpoint(step + 1, self.checkpointer)
-                self._log_training_progress(step + 1, metrics)
+                self._maybe_save_checkpoint(step, self.checkpointer)
+                self._log_training_progress(step, metrics)
 
                 accumulated_loss = 0.0
 
-        self._finalize_training(step, self.checkpointer)
+        final_step = micro_step // self.config.gradient_accumulation_steps
+        self._finalize_training(final_step, self.checkpointer)
