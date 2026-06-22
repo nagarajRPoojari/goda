@@ -174,18 +174,20 @@ class PreTrainer(BaseTrainer):
         self.model.train()
         train_start_time = time.perf_counter()
         accumulated_loss = 0.0
-        micro_step = 0
+        
+        # Calculate starting micro_step from start_step
+        micro_step = self.start_step * self.config.gradient_accumulation_steps
 
         resume_state = getattr(self, "dataloader_state", None)
 
-        # Don't use enumerate with start parameter - it causes step/micro_step mismatch
-        # Instead, manually track the step counter
-        step = self.start_step
         batch_iterator = self.dataloader.batch_loader(split="train", resume_state=resume_state)
 
         step_start_time = time.perf_counter()
 
         for inputs, targets, loss_mask, doc_ids in batch_iterator:
+            # Calculate current step for interrupt check (before increment)
+            step = micro_step // self.config.gradient_accumulation_steps
+            
             if (
                 self._handle_interrupt(step, self.checkpointer)
                 or step >= self.config.train_num_steps
@@ -205,6 +207,8 @@ class PreTrainer(BaseTrainer):
             micro_step += 1  # noqa: SIM113
 
             if not is_accumulating:
+                # Calculate step after completing gradient accumulation
+                step = micro_step // self.config.gradient_accumulation_steps
                 scheduler_metrics = self.scheduler.step(self.optimizer, step)
                 self._perform_optimization_step(micro_step, step, scheduler_metrics)
 
@@ -226,9 +230,6 @@ class PreTrainer(BaseTrainer):
                     scheduler_metrics,
                     train_start_time,
                 )
-
-                # Increment step counter after completing gradient accumulation
-                step += 1
 
                 if step % self.config.eval_every_n_steps == 0 and step > 0:
                     self._run_evaluation(
@@ -254,4 +255,5 @@ class PreTrainer(BaseTrainer):
 
                 accumulated_loss = 0.0
 
-        self._finalize_training(step, self.checkpointer)
+        final_step = micro_step // self.config.gradient_accumulation_steps
+        self._finalize_training(final_step, self.checkpointer)

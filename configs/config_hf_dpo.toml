@@ -1,17 +1,3 @@
-[model]
-embed_dim = 512
-hidden_dim = 2048
-seq_length = 512
-vocab_size = 50267
-n_layers = 2
-n_heads = 4
-n_kv_heads = 4
-head_dim = 128
-rope_base_theta = 100000
-tie_weights = true
-
-
-
 [train]
 mixed_precision = true
 use_meta_device = true
@@ -19,7 +5,7 @@ compile_model = false
 train_num_steps = 10
 grad_clip = 1.2
 log_every_n_steps = 1
-eval_every_n_steps = 100
+eval_every_n_steps = 4
 eval_num_steps = 10
 core_eval_every_n_step = 500
 gradient_accumulation_steps = 8
@@ -57,16 +43,6 @@ weight_decay_embedding = 0.001
 weight_decay_scalar = 0.05
 scalar_lr_multiplier = 0.01
 
-
-[optim]
-muon_momentum = 0.95
-muon_beta2 = 0.9
-muon_ns_steps = 5
-adamw_beta1 = 0.8
-adamw_beta2_lm_head = 0.96
-adamw_beta2_embedding = 0.995
-adamw_beta2_scalar = 0.95
-adamw_eps = 1.0e-10
 
 [device]
 mixed_precision = false
